@@ -4,6 +4,7 @@ import json
 import random
 import shutil
 import sys
+from html import escape
 from pathlib import Path
 
 import numpy as np
@@ -66,6 +67,508 @@ PLAYER_AVAILABILITY_PATH = PROCESSED_DIR / "player_availability.csv"
 LINEUPS_PATH = PROCESSED_DIR / "lineups.csv"
 PLAYER_AVAILABILITY_COLUMNS = ["match_id", "team", "player", "status", "reason", "importance"]
 LINEUP_COLUMNS = ["match_id", "team", "player", "position", "is_starter"]
+
+
+def inject_dashboard_css() -> None:
+    st.markdown(
+        """
+        <style>
+        :root {
+            --bg: #050b14;
+            --panel: rgba(10, 18, 32, 0.88);
+            --panel-strong: rgba(13, 27, 48, 0.96);
+            --panel-soft: rgba(15, 23, 42, 0.74);
+            --border: rgba(148, 163, 184, 0.22);
+            --border-strong: rgba(56, 189, 248, 0.52);
+            --text: #e5eefb;
+            --muted: #94a3b8;
+            --green: #34d399;
+            --blue: #38bdf8;
+            --yellow: #facc15;
+            --radius: 8px;
+        }
+        .stApp {
+            background:
+                linear-gradient(90deg, rgba(148, 163, 184, 0.035) 1px, transparent 1px),
+                linear-gradient(180deg, rgba(148, 163, 184, 0.028) 1px, transparent 1px),
+                linear-gradient(135deg, #050b14 0%, #071827 46%, #030712 100%);
+            background-size: 44px 44px, 44px 44px, auto;
+            color: var(--text);
+        }
+        #MainMenu, footer, [data-testid="stDecoration"], [data-testid="stToolbar"], [data-testid="stStatusWidget"] {
+            visibility: hidden;
+        }
+        [data-testid="stHeader"] {
+            background: rgba(5, 11, 20, 0.86);
+            backdrop-filter: blur(10px);
+        }
+        .block-container {
+            max-width: 1440px;
+            padding-top: 1.1rem;
+            padding-bottom: 3rem;
+        }
+        h1, h2, h3, h4, h5, h6, p, li, label, span {
+            color: var(--text);
+        }
+        h2, h3 {
+            letter-spacing: 0;
+        }
+        .hero {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(56, 189, 248, 0.34);
+            background:
+                linear-gradient(90deg, rgba(52, 211, 153, 0.08) 0 1px, transparent 1px 100%),
+                linear-gradient(180deg, rgba(56, 189, 248, 0.08) 0 1px, transparent 1px 100%),
+                linear-gradient(135deg, rgba(8, 47, 73, 0.96), rgba(6, 78, 59, 0.48) 52%, rgba(15, 23, 42, 0.98));
+            background-size: 42px 42px, 42px 42px, auto;
+            border-radius: var(--radius);
+            padding: 28px 30px 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+        }
+        .hero::after {
+            content: "";
+            position: absolute;
+            inset: auto 24px 0 24px;
+            height: 3px;
+            background: linear-gradient(90deg, var(--green), var(--blue));
+            opacity: 0.9;
+        }
+        .hero-topline {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+        .hero-kicker {
+            color: #bbf7d0;
+            font-size: 0.78rem;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+        .hero-live {
+            border: 1px solid rgba(56, 189, 248, 0.42);
+            color: #e0f2fe;
+            background: rgba(8, 47, 73, 0.56);
+            border-radius: 999px;
+            padding: 7px 12px;
+            font-size: 0.78rem;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+        .hero h1 {
+            margin: 0 0 8px;
+            font-size: 3rem;
+            line-height: 1.05;
+            letter-spacing: 0;
+        }
+        .hero p {
+            margin: 0;
+            max-width: 920px;
+            color: #d7e6f7;
+            font-size: 1.05rem;
+        }
+        .hero-stats {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 22px;
+        }
+        .hero-stat {
+            background: rgba(2, 6, 23, 0.42);
+            border: 1px solid rgba(226, 232, 240, 0.16);
+            border-radius: var(--radius);
+            padding: 12px 14px;
+        }
+        .hero-stat span {
+            display: block;
+            color: var(--muted);
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+        .hero-stat strong {
+            display: block;
+            margin-top: 3px;
+            color: var(--text);
+            font-size: 1rem;
+        }
+        .section-card, div[data-testid="stVerticalBlockBorderWrapper"] {
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(7, 17, 31, 0.88));
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.05rem;
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+        }
+        div[data-testid="stMetric"], .kpi-card, .prob-card, .score-card, .method-card {
+            background: var(--panel-strong);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            box-shadow: 0 12px 38px rgba(0, 0, 0, 0.20);
+        }
+        div[data-testid="stMetric"] label, div[data-testid="stMetricLabel"] p {
+            color: var(--muted) !important;
+        }
+        div[data-testid="stMetricValue"] {
+            color: var(--text);
+        }
+        .prob-card {
+            min-height: 166px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            border-color: rgba(56, 189, 248, 0.32);
+            background:
+                linear-gradient(180deg, rgba(13, 27, 48, 0.98), rgba(3, 7, 18, 0.94));
+            position: relative;
+            overflow: hidden;
+        }
+        .prob-card::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--blue);
+            opacity: 0.72;
+        }
+        .prob-card.top {
+            border-color: rgba(52, 211, 153, 0.85);
+            background:
+                linear-gradient(145deg, rgba(20, 83, 45, 0.76), rgba(8, 47, 73, 0.38) 58%, rgba(15, 23, 42, 0.98));
+            box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.25), 0 20px 60px rgba(52, 211, 153, 0.16);
+        }
+        .prob-card.top::before {
+            background: var(--green);
+            opacity: 1;
+        }
+        .prob-card .label, .score-card .label, .kpi-card .label {
+            color: var(--muted);
+            font-size: 0.86rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .prob-card .value {
+            color: var(--text);
+            font-size: 2.75rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+        .prob-card .tag {
+            color: #bbf7d0;
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+        .prob-card .bar {
+            height: 7px;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.18);
+            overflow: hidden;
+        }
+        .prob-card .bar span {
+            display: block;
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, var(--green), var(--blue));
+        }
+        .score-card .value, .kpi-card .value {
+            color: var(--text);
+            font-size: 2rem;
+            font-weight: 800;
+            line-height: 1.1;
+            margin-top: 8px;
+        }
+        .kpi-card .sub, .score-card .sub, .method-card p {
+            color: var(--muted);
+            margin: 6px 0 0;
+            font-size: 0.9rem;
+        }
+        .section-heading {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+        }
+        .section-eyebrow {
+            color: var(--green);
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+        .section-title {
+            color: var(--text);
+            font-size: 1.35rem;
+            font-weight: 850;
+            margin-top: 2px;
+        }
+        .section-subtitle {
+            color: var(--muted);
+            font-size: 0.92rem;
+            margin-top: 3px;
+            max-width: 820px;
+        }
+        .info-note {
+            border: 1px solid rgba(56, 189, 248, 0.28);
+            background: rgba(8, 47, 73, 0.32);
+            border-radius: var(--radius);
+            color: #d7e6f7;
+            padding: 10px 12px;
+            margin: 10px 0 14px;
+            font-size: 0.92rem;
+        }
+        .bullet-panel {
+            border: 1px solid rgba(52, 211, 153, 0.26);
+            background: rgba(20, 83, 45, 0.18);
+            border-radius: var(--radius);
+            padding: 13px 16px;
+            margin-top: 12px;
+        }
+        .bullet-panel ul {
+            margin: 0;
+            padding-left: 1.05rem;
+        }
+        .bullet-panel li {
+            color: #dbeafe;
+            margin: 6px 0;
+        }
+        .dark-table-wrap {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            overflow-y: hidden;
+            background: rgba(2, 6, 23, 0.34);
+            margin: 8px 0 16px;
+        }
+        .dark-table-wrap table {
+            width: 100%;
+            border-collapse: collapse;
+            color: var(--text);
+            font-size: 0.88rem;
+        }
+        .dark-table-wrap thead th {
+            background: rgba(8, 47, 73, 0.72);
+            color: #bfdbfe;
+            font-weight: 800;
+            text-transform: uppercase;
+            font-size: 0.72rem;
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+            text-align: left;
+            white-space: nowrap;
+        }
+        .dark-table-wrap tbody th,
+        .dark-table-wrap tbody td {
+            padding: 9px 12px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.13);
+            color: #dbeafe;
+            white-space: nowrap;
+        }
+        .dark-table-wrap tbody tr:nth-child(even) {
+            background: rgba(15, 23, 42, 0.40);
+        }
+        .dark-table-wrap tbody tr:hover {
+            background: rgba(14, 116, 144, 0.20);
+        }
+        .method-card {
+            min-height: 170px;
+            margin-bottom: 14px;
+        }
+        .method-card h4 {
+            margin: 0 0 8px;
+            color: #e0f2fe;
+        }
+        .method-card ul {
+            margin: 0;
+            padding-left: 1rem;
+        }
+        .method-card li {
+            color: #cbd5e1;
+            margin-bottom: 4px;
+        }
+        [data-testid="stDataFrame"], [data-testid="stTable"] {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: rgba(2, 6, 23, 0.34);
+        }
+        [data-baseweb="tab-list"] {
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        [data-baseweb="tab"] {
+            background: rgba(15, 23, 42, 0.70);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 8px 18px;
+        }
+        [data-baseweb="tab"][aria-selected="true"] {
+            border-color: rgba(56, 189, 248, 0.75);
+            background: rgba(14, 116, 144, 0.35);
+        }
+        [data-baseweb="tab-highlight"] {
+            background: linear-gradient(90deg, var(--green), var(--blue));
+        }
+        .stButton > button, .stDownloadButton > button {
+            border-radius: 999px;
+            border: 1px solid rgba(56, 189, 248, 0.42);
+            background: rgba(8, 145, 178, 0.18);
+            color: #e0f2fe;
+        }
+        .stButton > button:hover, .stDownloadButton > button:hover {
+            border-color: var(--green);
+            color: #bbf7d0;
+        }
+        div[data-baseweb="select"] > div,
+        div[data-baseweb="input"] > div {
+            background: rgba(15, 23, 42, 0.88);
+            border-color: rgba(148, 163, 184, 0.32);
+        }
+        div[data-baseweb="select"] span,
+        div[data-baseweb="select"] div,
+        div[data-baseweb="input"] input {
+            color: var(--text) !important;
+        }
+        div[data-baseweb="select"] svg {
+            fill: var(--muted);
+        }
+        .stAlert {
+            border-radius: var(--radius);
+        }
+        @media (max-width: 760px) {
+            .hero h1 {
+                font-size: 2.25rem;
+            }
+            .hero-topline {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+            .hero-stats {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_hero() -> None:
+    st.markdown(
+        f"""
+        <section class="hero">
+            <div class="hero-topline">
+                <div class="hero-kicker">World Cup 2026 analytics dashboard</div>
+                <div class="hero-live">Model trained before {escape(TRAINING_CUTOFF_DATE)}</div>
+            </div>
+            <h1>World Cup Match &amp; Tournament Predictor</h1>
+            <p>
+                Predict match outcomes, scorelines, and group qualification chances using historical football data,
+                Elo, form, xG, and Monte Carlo simulation.
+            </p>
+            <div class="hero-stats">
+                <div class="hero-stat"><span>Predictor</span><strong>Match odds + scores</strong></div>
+                <div class="hero-stat"><span>Simulation</span><strong>Group paths</strong></div>
+                <div class="hero-stat"><span>Models</span><strong>Baseline + xG</strong></div>
+                <div class="hero-stat"><span>Exports</span><strong>CSV ready</strong></div>
+            </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_section_header(title: str, subtitle: str = "", eyebrow: str = "") -> None:
+    eyebrow_html = f'<div class="section-eyebrow">{escape(eyebrow)}</div>' if eyebrow else ""
+    subtitle_html = f'<div class="section-subtitle">{escape(subtitle)}</div>' if subtitle else ""
+    st.markdown(
+        f"""
+        <div class="section-heading">
+            <div>
+                {eyebrow_html}
+                <div class="section-title">{escape(title)}</div>
+                {subtitle_html}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_info_note(text: str) -> None:
+    st.markdown(f'<div class="info-note">{escape(text)}</div>', unsafe_allow_html=True)
+
+
+def render_probability_card(label: str, probability: float, is_top: bool = False) -> None:
+    top_class = " top" if is_top else ""
+    tag = "Highest probability" if is_top else "Model probability"
+    bar_width = max(0.0, min(100.0, probability * 100))
+    st.markdown(
+        f"""
+        <div class="prob-card{top_class}">
+            <div class="label">{escape(label)}</div>
+            <div class="value">{probability * 100:.1f}%</div>
+            <div class="tag">{tag}</div>
+            <div class="bar"><span style="width: {bar_width:.1f}%"></span></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_score_card(label: str, value: str, subtext: str) -> None:
+    st.markdown(
+        f"""
+        <div class="score-card">
+            <div class="label">{escape(label)}</div>
+            <div class="value">{escape(value)}</div>
+            <div class="sub">{escape(subtext)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_kpi_card(label: str, value: str, subtext: str = "") -> None:
+    st.markdown(
+        f"""
+        <div class="kpi-card">
+            <div class="label">{escape(label)}</div>
+            <div class="value">{escape(value)}</div>
+            <div class="sub">{escape(subtext)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_method_card(title: str, items: list[str]) -> None:
+    body = "".join(f"<li>{escape(item)}</li>" for item in items)
+    st.markdown(
+        f"""
+        <div class="method-card">
+            <h4>{escape(title)}</h4>
+            <ul>{body}</ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_bullet_panel(points: list[str]) -> None:
+    body = "".join(f"<li>{escape(point)}</li>" for point in points)
+    st.markdown(f'<div class="bullet-panel"><ul>{body}</ul></div>', unsafe_allow_html=True)
+
+
+def render_dark_table(data: pd.DataFrame, hide_index: bool = False) -> None:
+    table_html = data.to_html(index=not hide_index, escape=True, border=0)
+    st.markdown(f'<div class="dark-table-wrap">{table_html}</div>', unsafe_allow_html=True)
 
 
 def get_host_side(team_a: str, team_b: str, venue_country: str) -> str | None:
@@ -488,75 +991,78 @@ def render_team_news(match_id: str, team_a: str, team_b: str) -> None:
     lineups_a = rows_for_match_team(lineups, match_id, team_a)
     lineups_b = rows_for_match_team(lineups, match_id, team_b)
 
-    st.subheader("Team News")
-    st.caption("Lineup and availability data is displayed for context only and is not currently included in the model.")
+    with st.container(border=True):
+        render_section_header(
+            "Team News",
+            "Lineups and availability are context only and are not currently included in the model.",
+            "Context",
+        )
 
-    for warning in [availability_warning, lineups_warning]:
-        if warning:
-            st.warning(warning)
+        for warning in [availability_warning, lineups_warning]:
+            if warning:
+                st.warning(warning)
 
-    if availability_a.empty and availability_b.empty and lineups_a.empty and lineups_b.empty:
-        st.info("No lineup or player availability data added for this match yet.")
-        return
+        if availability_a.empty and availability_b.empty and lineups_a.empty and lineups_b.empty:
+            st.info("No lineup or player availability data added for this match yet.")
+            return
 
-    impact_a = availability_impact_counts(availability_a)
-    impact_b = availability_impact_counts(availability_b)
-    st.markdown("**Availability Impact**")
-    st.caption("This is contextual only and is not currently included in the model.")
-    impact_table = pd.DataFrame(
-        [
-            {
-                "Team": f"Team A: {team_a}",
-                "High-importance unavailable": impact_a["unavailable"],
-                "High-importance doubtful": impact_a["doubtful"],
-            },
-            {
-                "Team": f"Team B: {team_b}",
-                "High-importance unavailable": impact_b["unavailable"],
-                "High-importance doubtful": impact_b["doubtful"],
-            },
-        ]
-    )
-    st.table(impact_table.set_index("Team"))
+        impact_a = availability_impact_counts(availability_a)
+        impact_b = availability_impact_counts(availability_b)
+        render_section_header("Availability Impact", "High-importance unavailable and doubtful players.", "Team news")
+        impact_table = pd.DataFrame(
+            [
+                {
+                    "Team": f"Team A: {team_a}",
+                    "High-importance unavailable": impact_a["unavailable"],
+                    "High-importance doubtful": impact_a["doubtful"],
+                },
+                {
+                    "Team": f"Team B: {team_b}",
+                    "High-importance unavailable": impact_b["unavailable"],
+                    "High-importance doubtful": impact_b["doubtful"],
+                },
+            ]
+        )
+        render_dark_table(impact_table.set_index("Team"))
 
-    warning_messages = []
-    for label, team, impact in [("Team A", team_a, impact_a), ("Team B", team_b, impact_b)]:
-        if impact["unavailable"] or impact["doubtful"]:
-            warning_messages.append(
-                f"{label} ({team}) has {impact['unavailable']} high-importance unavailable "
-                f"and {impact['doubtful']} high-importance doubtful player(s)."
-            )
-    for message in warning_messages:
-        st.warning(message)
-
-    team_columns = st.columns(2)
-    for column, label, team, availability_rows, lineup_rows in [
-        (team_columns[0], "Team A", team_a, availability_a, lineups_a),
-        (team_columns[1], "Team B", team_b, availability_b, lineups_b),
-    ]:
-        with column:
-            st.markdown(f"**{label}: {team}**")
-
-            st.write("Player availability")
-            if availability_rows.empty:
-                st.caption("No availability notes.")
-            else:
-                availability_display = availability_rows[["player", "status", "reason", "importance"]].rename(
-                    columns={
-                        "player": "Player",
-                        "status": "Status",
-                        "reason": "Reason",
-                        "importance": "Importance",
-                    }
+        warning_messages = []
+        for label, team, impact in [("Team A", team_a, impact_a), ("Team B", team_b, impact_b)]:
+            if impact["unavailable"] or impact["doubtful"]:
+                warning_messages.append(
+                    f"{label} ({team}) has {impact['unavailable']} high-importance unavailable "
+                    f"and {impact['doubtful']} high-importance doubtful player(s)."
                 )
-                st.dataframe(availability_display, use_container_width=True, hide_index=True)
+        for message in warning_messages:
+            st.warning(message)
 
-            st.write("Lineup")
-            lineup_display = format_lineup_rows(lineup_rows)
-            if lineup_display.empty:
-                st.caption("No lineup added.")
-            else:
-                st.dataframe(lineup_display, use_container_width=True, hide_index=True)
+        team_columns = st.columns(2)
+        for column, label, team, availability_rows, lineup_rows in [
+            (team_columns[0], "Team A", team_a, availability_a, lineups_a),
+            (team_columns[1], "Team B", team_b, availability_b, lineups_b),
+        ]:
+            with column:
+                render_section_header(f"{label}: {team}", "Local notes for this fixture.", "Squad")
+
+                st.caption("Player availability")
+                if availability_rows.empty:
+                    st.caption("No availability notes.")
+                else:
+                    availability_display = availability_rows[["player", "status", "reason", "importance"]].rename(
+                        columns={
+                            "player": "Player",
+                            "status": "Status",
+                            "reason": "Reason",
+                            "importance": "Importance",
+                        }
+                    )
+                    render_dark_table(availability_display, hide_index=True)
+
+                st.caption("Lineup")
+                lineup_display = format_lineup_rows(lineup_rows)
+                if lineup_display.empty:
+                    st.caption("No lineup added.")
+                else:
+                    render_dark_table(lineup_display, hide_index=True)
 
 
 def format_fixture_label(row: pd.Series) -> str:
@@ -577,48 +1083,67 @@ def render_predictor(latest: pd.DataFrame, teams: list[str]) -> None:
     mode_options = ["Select official fixture", "Custom match"]
     default_mode_index = 0 if has_fixtures else 1
 
-    mode_col, model_col = st.columns(2)
-    with mode_col:
-        prediction_mode = st.selectbox("Prediction mode", mode_options, index=default_mode_index)
-    with model_col:
-        outcome_model = st.selectbox("Outcome model", available_outcome_models())
+    with st.container(border=True):
+        render_section_header(
+            "Match Setup",
+            "Pick an official fixture or build a custom neutral-site World Cup matchup.",
+            "Predictor",
+        )
+        mode_col, model_col = st.columns(2)
+        with mode_col:
+            prediction_mode = st.selectbox("Prediction mode", mode_options, index=default_mode_index)
+        with model_col:
+            outcome_model = st.selectbox("Outcome model", available_outcome_models())
 
-    if fixture_warning:
-        st.warning(f"{fixture_warning} Use Custom match mode to enter teams manually.")
+        if fixture_warning:
+            st.warning(f"{fixture_warning} Use Custom match mode to enter teams manually.")
 
-    if prediction_mode == "Select official fixture" and not has_fixtures:
-        st.warning("Official fixture mode is unavailable until the fixture CSV is added.")
-        prediction_mode = "Custom match"
+        if prediction_mode == "Select official fixture" and not has_fixtures:
+            st.warning("Official fixture mode is unavailable until the fixture CSV is added.")
+            prediction_mode = "Custom match"
 
-    if prediction_mode == "Select official fixture":
-        fixture_labels = [format_fixture_label(row) for _, row in fixtures.iterrows()]
-        selected_label = st.selectbox("Fixture", fixture_labels)
-        fixture = fixtures.iloc[fixture_labels.index(selected_label)]
-        team_a = str(fixture["team_a"])
-        team_b = str(fixture["team_b"])
-        venue_country = str(fixture["venue_country"])
-        selected_match_id = str(fixture["match_id"])
-        tournament = "FIFA World Cup"
+        if prediction_mode == "Select official fixture":
+            fixture_labels = [format_fixture_label(row) for _, row in fixtures.iterrows()]
+            selected_label = st.selectbox("Fixture", fixture_labels, index=None, placeholder="Select a fixture")
+            if selected_label is None:
+                render_info_note(
+                    "Team A and Team B are labels only. Host advantage applies only for a selected 2026 host country."
+                )
+                render_info_note("Select a fixture to generate a prediction.")
+                return
 
-        fixture_cols = st.columns(4)
-        fixture_cols[0].metric("Team A", team_a)
-        fixture_cols[1].metric("Team B", team_b)
-        fixture_cols[2].metric("Venue country", venue_country)
-        fixture_cols[3].metric("Venue city", str(fixture["venue_city"]))
-    else:
-        selected_match_id = None
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            default_team_a = teams.index("Argentina") if "Argentina" in teams else 0
-            team_a = st.selectbox("Team A", teams, index=default_team_a)
-        with col2:
-            default_team_b = teams.index("France") if "France" in teams else min(1, len(teams) - 1)
-            team_b = st.selectbox("Team B", teams, index=default_team_b)
-        with col3:
-            tournament = st.selectbox("Tournament type", ["FIFA World Cup", "Friendly", "World Cup qualification", "Other"])
-            venue_country = st.selectbox("Venue country", [*HOST_COUNTRIES_2026, NEUTRAL_VENUE])
+            fixture = fixtures.iloc[fixture_labels.index(selected_label)]
+            team_a = str(fixture["team_a"])
+            team_b = str(fixture["team_b"])
+            venue_country = str(fixture["venue_country"])
+            selected_match_id = str(fixture["match_id"])
+            tournament = "FIFA World Cup"
 
-    st.caption("Team A and Team B are labels only. Host advantage is applied only for a selected 2026 host country.")
+            fixture_cols = st.columns(4)
+            with fixture_cols[0]:
+                render_kpi_card("Team A", team_a, "Fixture label")
+            with fixture_cols[1]:
+                render_kpi_card("Team B", team_b, "Fixture label")
+            with fixture_cols[2]:
+                render_kpi_card("Venue country", venue_country, "Host logic input")
+            with fixture_cols[3]:
+                render_kpi_card("Venue city", str(fixture["venue_city"]), "Fixture CSV")
+        else:
+            selected_match_id = None
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                default_team_a = teams.index("Argentina") if "Argentina" in teams else 0
+                team_a = st.selectbox("Team A", teams, index=default_team_a)
+            with col2:
+                default_team_b = teams.index("France") if "France" in teams else min(1, len(teams) - 1)
+                team_b = st.selectbox("Team B", teams, index=default_team_b)
+            with col3:
+                tournament = st.selectbox("Tournament type", ["FIFA World Cup", "Friendly", "World Cup qualification", "Other"])
+                venue_country = st.selectbox("Venue country", [*HOST_COUNTRIES_2026, NEUTRAL_VENUE])
+
+        render_info_note(
+            "Team A and Team B are labels only. Host advantage applies only for a selected 2026 host country."
+        )
 
     missing_fixture_teams = [team for team in [team_a, team_b] if model_team_name(team) not in teams]
     if missing_fixture_teams:
@@ -638,7 +1163,7 @@ def render_predictor(latest: pd.DataFrame, teams: list[str]) -> None:
     neutral_status = neutral_status_text(host_side)
     host_advantage_status = host_advantage_status_text(host_side, team_a, team_b)
 
-    st.caption(host_status)
+    render_info_note(host_status)
 
     if selected_match_id is not None:
         render_team_news(selected_match_id, team_a, team_b)
@@ -648,70 +1173,90 @@ def render_predictor(latest: pd.DataFrame, teams: list[str]) -> None:
     outcome_probs = predict_outcome_from_artifact(X, outcome_model, outcome_artifact)
     home_xg, away_xg, scorelines, score_outcome = predict_score(X, max_goals=6)
 
-    st.subheader("Outcome probabilities")
-    st.caption(f"Model: {outcome_model}")
-    prob_cols = st.columns(3)
     labels = {
         "team_a_win": f"{team_a} win",
         "draw": "Draw",
         "team_b_win": f"{team_b} win",
     }
     outcome_display_probs = team_result_probabilities(outcome_probs, team_a_is_model_home)
-    for i, key in enumerate(["team_a_win", "draw", "team_b_win"]):
-        prob_cols[i].metric(labels[key], f"{outcome_display_probs[key] * 100:.1f}%")
+    highest_probability_key = max(outcome_display_probs, key=outcome_display_probs.get)
+    with st.container(border=True):
+        render_section_header("Outcome Probabilities", f"Selected model: {outcome_model}", "Match forecast")
+        prob_cols = st.columns(3)
+        for i, key in enumerate(["team_a_win", "draw", "team_b_win"]):
+            with prob_cols[i]:
+                render_probability_card(labels[key], outcome_display_probs[key], is_top=(key == highest_probability_key))
 
-    st.subheader("Score prediction")
-    team_a_xg = home_xg if team_a_is_model_home else away_xg
-    team_b_xg = away_xg if team_a_is_model_home else home_xg
-    score_cols = st.columns(3)
-    score_cols[0].metric(f"Expected goals: {team_a}", f"{team_a_xg:.2f}")
-    score_cols[1].metric(f"Expected goals: {team_b}", f"{team_b_xg:.2f}")
-    top_scoreline = scorelines.iloc[0]
-    if team_a_is_model_home:
-        most_likely_score = str(top_scoreline["scoreline"])
-    else:
-        most_likely_score = f"{top_scoreline['away_goals']}-{top_scoreline['home_goals']}"
-    score_cols[2].metric(f"Most likely score ({team_a}-{team_b})", most_likely_score)
-
-    st.write("Score outcome probabilities")
-    score_prob_cols = st.columns(3)
-    score_display_probs = team_result_probabilities(score_outcome, team_a_is_model_home)
-    for i, key in enumerate(["team_a_win", "draw", "team_b_win"]):
-        score_prob_cols[i].metric(labels[key], f"{score_display_probs[key] * 100:.1f}%")
-
-    st.subheader("Top scorelines")
-    top_scorelines = scorelines.head(10).copy()
-    if not team_a_is_model_home:
-        top_scorelines["scoreline"] = (
-            top_scorelines["away_goals"].astype(str) + "-" + top_scorelines["home_goals"].astype(str)
+    with st.container(border=True):
+        render_section_header(
+            "Scoreline Model",
+            "Expected goals, score outcome probabilities and the most likely scorelines.",
+            "Score prediction",
         )
-    top_scorelines["outcome"] = top_scorelines["outcome"].map(
-        lambda outcome: model_outcome_label(outcome, team_a_is_model_home, team_a, team_b)
-    )
-    top_scorelines["probability"] = (top_scorelines["probability"] * 100).round(2)
-    st.dataframe(top_scorelines[["scoreline", "outcome", "probability"]], use_container_width=True, hide_index=True)
+        team_a_xg = home_xg if team_a_is_model_home else away_xg
+        team_b_xg = away_xg if team_a_is_model_home else home_xg
+        score_cols = st.columns(3)
+        with score_cols[0]:
+            render_score_card(f"Expected goals: {team_a}", f"{team_a_xg:.2f}", "Team A goal estimate")
+        with score_cols[1]:
+            render_score_card(f"Expected goals: {team_b}", f"{team_b_xg:.2f}", "Team B goal estimate")
+        top_scoreline = scorelines.iloc[0]
+        if team_a_is_model_home:
+            most_likely_score = str(top_scoreline["scoreline"])
+        else:
+            most_likely_score = f"{top_scoreline['away_goals']}-{top_scoreline['home_goals']}"
+        with score_cols[2]:
+            render_score_card(
+                f"Most likely score ({team_a}-{team_b})",
+                most_likely_score,
+                "Top scoreline from the score model",
+            )
 
-    match_prediction_export = pd.DataFrame(
-        [
-            {
-                "Team A": team_a,
-                "Team B": team_b,
-                "Venue country": venue_country,
-                "Selected model": outcome_model,
-                "Team A win probability": outcome_display_probs["team_a_win"],
-                "Draw probability": outcome_display_probs["draw"],
-                "Team B win probability": outcome_display_probs["team_b_win"],
-                "Predicted scoreline": most_likely_score,
-                "Training cutoff date": TRAINING_CUTOFF_DATE,
-            }
-        ]
-    )
-    render_csv_download(
-        match_prediction_export,
-        "match_prediction.csv",
-        "Download match prediction CSV",
-        "download_match_prediction",
-    )
+        render_section_header("Score Outcome Probabilities", "Derived from the goal model.", "Score model")
+        score_prob_cols = st.columns(3)
+        score_display_probs = team_result_probabilities(score_outcome, team_a_is_model_home)
+        highest_score_probability_key = max(score_display_probs, key=score_display_probs.get)
+        for i, key in enumerate(["team_a_win", "draw", "team_b_win"]):
+            with score_prob_cols[i]:
+                render_probability_card(
+                    labels[key],
+                    score_display_probs[key],
+                    is_top=(key == highest_score_probability_key),
+                )
+
+        render_section_header("Top Scorelines", "Most likely scorelines from the goal model.", "Score table")
+        top_scorelines = scorelines.head(10).copy()
+        if not team_a_is_model_home:
+            top_scorelines["scoreline"] = (
+                top_scorelines["away_goals"].astype(str) + "-" + top_scorelines["home_goals"].astype(str)
+            )
+        top_scorelines["outcome"] = top_scorelines["outcome"].map(
+            lambda outcome: model_outcome_label(outcome, team_a_is_model_home, team_a, team_b)
+        )
+        top_scorelines["probability"] = (top_scorelines["probability"] * 100).round(2)
+        render_dark_table(top_scorelines[["scoreline", "outcome", "probability"]], hide_index=True)
+
+        match_prediction_export = pd.DataFrame(
+            [
+                {
+                    "Team A": team_a,
+                    "Team B": team_b,
+                    "Venue country": venue_country,
+                    "Selected model": outcome_model,
+                    "Team A win probability": outcome_display_probs["team_a_win"],
+                    "Draw probability": outcome_display_probs["draw"],
+                    "Team B win probability": outcome_display_probs["team_b_win"],
+                    "Predicted scoreline": most_likely_score,
+                    "Training cutoff date": TRAINING_CUTOFF_DATE,
+                }
+            ]
+        )
+        render_csv_download(
+            match_prediction_export,
+            "match_prediction.csv",
+            "Download match prediction CSV",
+            "download_match_prediction",
+        )
 
     team_a_features = latest_by_team.loc[model_team_a]
     team_b_features = latest_by_team.loc[model_team_b]
@@ -725,77 +1270,84 @@ def render_predictor(latest: pd.DataFrame, teams: list[str]) -> None:
     team_a_win_rate_last_5 = float(team_a_features["win_rate_last_5"])
     team_b_win_rate_last_5 = float(team_b_features["win_rate_last_5"])
 
-    st.subheader("Why this prediction?")
-    st.markdown("**Top factors in this prediction**")
-    contribution_table = local_logistic_contribution_table(
-        model_label=outcome_model,
-        artifact=outcome_artifact,
-        fixture_features=X,
-        outcome_probs=outcome_probs,
-        team_a_is_model_home=team_a_is_model_home,
-        top_n=10,
-    )
-    if contribution_table is None or contribution_table.empty:
-        st.info(
-            "Detailed per-match feature contributions are currently available for Logistic Regression models. "
-            "Use Feature Importance for XGBoost-level global importance."
+    with st.container(border=True):
+        render_section_header(
+            "Why This Prediction?",
+            "Key model inputs and plain-English context for the selected matchup.",
+            "Explanation",
         )
-    else:
-        display_contribution_table = contribution_table.copy()
-        display_contribution_table["Value"] = display_contribution_table["Value"].map(lambda value: f"{value:.3f}")
-        display_contribution_table["Contribution"] = display_contribution_table["Contribution"].map(
-            lambda value: f"{value:+.4f}"
+        render_section_header("Top Factors", "Per-match contributions are available for Logistic Regression models.", "Model view")
+        contribution_table = local_logistic_contribution_table(
+            model_label=outcome_model,
+            artifact=outcome_artifact,
+            fixture_features=X,
+            outcome_probs=outcome_probs,
+            team_a_is_model_home=team_a_is_model_home,
+            top_n=10,
         )
-        st.table(display_contribution_table.set_index("Feature"))
+        if contribution_table is None or contribution_table.empty:
+            st.info(
+                "Detailed per-match feature contributions are currently available for Logistic Regression models. "
+                "Use Feature Importance for XGBoost-level global importance."
+            )
+        else:
+            display_contribution_table = contribution_table.copy()
+            display_contribution_table["Value"] = display_contribution_table["Value"].map(lambda value: f"{value:.3f}")
+            display_contribution_table["Contribution"] = display_contribution_table["Contribution"].map(
+                lambda value: f"{value:+.4f}"
+            )
+            render_dark_table(display_contribution_table.set_index("Feature"))
 
-    explanation_table = pd.DataFrame(
-        [
-            {"Feature": f"Team A Elo ({team_a})", "Value": f"{team_a_elo:.0f}"},
-            {"Feature": f"Team B Elo ({team_b})", "Value": f"{team_b_elo:.0f}"},
-            {"Feature": "Elo difference (Team A - Team B)", "Value": f"{elo_diff:+.0f}"},
-            {"Feature": f"Team A points per game last 5 ({team_a})", "Value": f"{team_a_ppg_last_5:.2f}"},
-            {"Feature": f"Team B points per game last 5 ({team_b})", "Value": f"{team_b_ppg_last_5:.2f}"},
-            {"Feature": f"Team A goal difference avg last 5 ({team_a})", "Value": f"{team_a_goal_diff_last_5:+.2f}"},
-            {"Feature": f"Team B goal difference avg last 5 ({team_b})", "Value": f"{team_b_goal_diff_last_5:+.2f}"},
-            {"Feature": f"Team A win rate last 5 ({team_a})", "Value": f"{team_a_win_rate_last_5 * 100:.0f}%"},
-            {"Feature": f"Team B win rate last 5 ({team_b})", "Value": f"{team_b_win_rate_last_5 * 100:.0f}%"},
-            {"Feature": "Neutral venue status", "Value": neutral_status},
-            {"Feature": "Host advantage status", "Value": host_advantage_status},
-        ]
-    )
-    st.table(explanation_table.set_index("Feature"))
-
-    if all(column in latest.columns for column in LATEST_XG_COLUMNS):
-        xg_explanation_table = pd.DataFrame(
+        explanation_table = pd.DataFrame(
             [
-                {"Feature": f"Team A xG for avg last 5 ({team_a})", "Value": f"{float(team_a_features['xg_for_avg_last_5']):.2f}"},
-                {"Feature": f"Team B xG for avg last 5 ({team_b})", "Value": f"{float(team_b_features['xg_for_avg_last_5']):.2f}"},
-                {
-                    "Feature": f"Team A xG against avg last 5 ({team_a})",
-                    "Value": f"{float(team_a_features['xg_against_avg_last_5']):.2f}",
-                },
-                {
-                    "Feature": f"Team B xG against avg last 5 ({team_b})",
-                    "Value": f"{float(team_b_features['xg_against_avg_last_5']):.2f}",
-                },
+                {"Feature": f"Team A Elo ({team_a})", "Value": f"{team_a_elo:.0f}"},
+                {"Feature": f"Team B Elo ({team_b})", "Value": f"{team_b_elo:.0f}"},
+                {"Feature": "Elo difference (Team A - Team B)", "Value": f"{elo_diff:+.0f}"},
+                {"Feature": f"Team A points per game last 5 ({team_a})", "Value": f"{team_a_ppg_last_5:.2f}"},
+                {"Feature": f"Team B points per game last 5 ({team_b})", "Value": f"{team_b_ppg_last_5:.2f}"},
+                {"Feature": f"Team A goal difference avg last 5 ({team_a})", "Value": f"{team_a_goal_diff_last_5:+.2f}"},
+                {"Feature": f"Team B goal difference avg last 5 ({team_b})", "Value": f"{team_b_goal_diff_last_5:+.2f}"},
+                {"Feature": f"Team A win rate last 5 ({team_a})", "Value": f"{team_a_win_rate_last_5 * 100:.0f}%"},
+                {"Feature": f"Team B win rate last 5 ({team_b})", "Value": f"{team_b_win_rate_last_5 * 100:.0f}%"},
+                {"Feature": "Neutral venue status", "Value": neutral_status},
+                {"Feature": "Host advantage status", "Value": host_advantage_status},
             ]
         )
-        st.table(xg_explanation_table.set_index("Feature"))
-    else:
-        st.info("xG features are not currently available for this model.")
+        render_section_header("Input Snapshot", "Core feature values passed into the prediction.", "Features")
+        render_dark_table(explanation_table.set_index("Feature"))
 
-    explanation_points = build_explanation_points(
-        team_a=team_a,
-        team_b=team_b,
-        outcome_probs=outcome_display_probs,
-        elo_diff=elo_diff,
-        ppg_diff=team_a_ppg_last_5 - team_b_ppg_last_5,
-        goal_diff_diff=team_a_goal_diff_last_5 - team_b_goal_diff_last_5,
-        win_rate_diff=team_a_win_rate_last_5 - team_b_win_rate_last_5,
-        neutral_status=neutral_status,
-        host_advantage_status=host_advantage_status,
-    )
-    st.markdown("\n".join(f"- {point}" for point in explanation_points))
+        if all(column in latest.columns for column in LATEST_XG_COLUMNS):
+            xg_explanation_table = pd.DataFrame(
+                [
+                    {"Feature": f"Team A xG for avg last 5 ({team_a})", "Value": f"{float(team_a_features['xg_for_avg_last_5']):.2f}"},
+                    {"Feature": f"Team B xG for avg last 5 ({team_b})", "Value": f"{float(team_b_features['xg_for_avg_last_5']):.2f}"},
+                    {
+                        "Feature": f"Team A xG against avg last 5 ({team_a})",
+                        "Value": f"{float(team_a_features['xg_against_avg_last_5']):.2f}",
+                    },
+                    {
+                        "Feature": f"Team B xG against avg last 5 ({team_b})",
+                        "Value": f"{float(team_b_features['xg_against_avg_last_5']):.2f}",
+                    },
+                ]
+            )
+            render_section_header("xG Snapshot", "Shown only when xG features are available.", "Optional layer")
+            render_dark_table(xg_explanation_table.set_index("Feature"))
+        else:
+            st.info("xG features are not currently available for this model.")
+
+        explanation_points = build_explanation_points(
+            team_a=team_a,
+            team_b=team_b,
+            outcome_probs=outcome_display_probs,
+            elo_diff=elo_diff,
+            ppg_diff=team_a_ppg_last_5 - team_b_ppg_last_5,
+            goal_diff_diff=team_a_goal_diff_last_5 - team_b_goal_diff_last_5,
+            win_rate_diff=team_a_win_rate_last_5 - team_b_win_rate_last_5,
+            neutral_status=neutral_status,
+            host_advantage_status=host_advantage_status,
+        )
+        render_bullet_panel(explanation_points)
 
 
 def predict_group_fixture(row: pd.Series, latest: pd.DataFrame, outcome_model: str) -> dict:
@@ -1462,7 +2014,11 @@ def format_bracket_round(round_table: pd.DataFrame) -> pd.DataFrame:
 
 
 def render_group_simulation(latest: pd.DataFrame, teams: list[str]) -> None:
-    st.subheader("Group Simulation")
+    render_section_header(
+        "Group Simulation",
+        "Project one group, run Monte Carlo simulations, and estimate all-groups qualification chances.",
+        "Tournament view",
+    )
 
     fixtures, fixture_warning = load_world_cup_fixtures()
     if fixture_warning:
@@ -1478,53 +2034,52 @@ def render_group_simulation(latest: pd.DataFrame, teams: list[str]) -> None:
         return
 
     fixture_summary = validate_group_stage_fixtures(fixtures)
-    st.subheader("Fixture Check")
-    st.caption("Each 4-team group should have 4 teams and 6 fixtures.")
-    st.dataframe(fixture_summary, use_container_width=True, hide_index=True)
+    with st.container(border=True):
+        render_section_header("Fixture Check", "Each 4-team group should have 4 teams and 6 fixtures.", "Data quality")
+        render_dark_table(fixture_summary, hide_index=True)
 
-    groups = sorted(group_fixtures["group"].dropna().astype(str).unique().tolist())
-    if not groups:
-        st.warning("Group Stage fixtures are missing group labels.")
-        return
+        groups = sorted(group_fixtures["group"].dropna().astype(str).unique().tolist())
+        if not groups:
+            st.warning("Group Stage fixtures are missing group labels.")
+            return
 
-    col1, col2 = st.columns(2)
-    with col1:
-        selected_group = st.selectbox("Group", groups)
-    with col2:
-        outcome_model = st.selectbox("Group simulation outcome model", available_outcome_models())
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_group = st.selectbox("Group", groups)
+        with col2:
+            outcome_model = st.selectbox("Group simulation outcome model", available_outcome_models())
 
-    selected_fixtures = group_fixtures[group_fixtures["group"].astype(str) == selected_group].copy()
-    if selected_fixtures.empty:
-        st.warning(f"No fixtures found for Group {selected_group}.")
-        return
+        selected_fixtures = group_fixtures[group_fixtures["group"].astype(str) == selected_group].copy()
+        if selected_fixtures.empty:
+            st.warning(f"No fixtures found for Group {selected_group}.")
+            return
 
-    selected_summary = fixture_summary[fixture_summary["Group"].astype(str) == selected_group]
-    if not selected_summary.empty and selected_summary.iloc[0]["Status"] == "Incomplete":
-        row = selected_summary.iloc[0]
-        st.warning(
-            f"Group {selected_group} fixture data is incomplete "
-            f"({row['Number of teams']} teams, {row['Number of fixtures']} fixtures). "
-            "Simulation results may be unreliable."
-        )
+        selected_summary = fixture_summary[fixture_summary["Group"].astype(str) == selected_group]
+        if not selected_summary.empty and selected_summary.iloc[0]["Status"] == "Incomplete":
+            row = selected_summary.iloc[0]
+            st.warning(
+                f"Group {selected_group} fixture data is incomplete "
+                f"({row['Number of teams']} teams, {row['Number of fixtures']} fixtures). "
+                "Simulation results may be unreliable."
+            )
 
-    with st.expander(f"Fixtures for Group {selected_group}"):
-        st.dataframe(
-            selected_fixtures[
-                ["date", "kickoff_time", "team_a", "team_b", "venue_city", "venue_country", "stage"]
-            ].rename(
-                columns={
-                    "date": "Date",
-                    "kickoff_time": "Kickoff time",
-                    "team_a": "Team A",
-                    "team_b": "Team B",
-                    "venue_city": "Venue city",
-                    "venue_country": "Venue country",
-                    "stage": "Stage",
-                }
-            ),
-            use_container_width=True,
-            hide_index=True,
-        )
+        with st.expander(f"Fixtures for Group {selected_group}"):
+            render_dark_table(
+                selected_fixtures[
+                    ["date", "kickoff_time", "team_a", "team_b", "venue_city", "venue_country", "stage"]
+                ].rename(
+                    columns={
+                        "date": "Date",
+                        "kickoff_time": "Kickoff time",
+                        "team_a": "Team A",
+                        "team_b": "Team B",
+                        "venue_city": "Venue city",
+                        "venue_country": "Venue country",
+                        "stage": "Stage",
+                    }
+                ),
+                hide_index=True,
+            )
 
     missing_teams = sorted(
         {
@@ -1541,132 +2096,145 @@ def render_group_simulation(latest: pd.DataFrame, teams: list[str]) -> None:
     predictions = [predict_group_fixture(row, latest, outcome_model) for _, row in selected_fixtures.iterrows()]
     group_table = build_projected_group_table(predictions)
 
-    if len(group_table) >= 2:
-        st.success(f"Likely direct qualifiers: {group_table.iloc[0]['Team']} and {group_table.iloc[1]['Team']}.")
-    if len(group_table) >= 3:
-        st.info(f"Possible qualifier, depending on third-place rules: {group_table.iloc[2]['Team']}.")
-
-    st.subheader(f"Projected Group {selected_group} Table")
-    selected_group_projection = group_table[
-        [
-            "Team",
-            "Played",
-            "Wins",
-            "Draws",
-            "Losses",
-            "Goals For",
-            "Goals Against",
-            "Goal Difference",
-            "Points",
-        ]
-    ].copy()
-    st.table(selected_group_projection)
-    render_csv_download(
-        selected_group_projection,
-        "selected_group_projection.csv",
-        "Download selected group projection CSV",
-        "download_selected_group_projection",
-    )
-
-    st.subheader("Match-by-match predictions")
-    match_rows = [
-        {
-            "Date": prediction["date"],
-            "Team A": prediction["team_a"],
-            "Team B": prediction["team_b"],
-            "Venue": prediction["venue"],
-            "Team A win %": f"{prediction['team_a_win_prob'] * 100:.1f}%",
-            "Draw %": f"{prediction['draw_prob'] * 100:.1f}%",
-            "Team B win %": f"{prediction['team_b_win_prob'] * 100:.1f}%",
-            "Predicted score": prediction["predicted_score"],
-            "Projected result": prediction["projected_result"],
-        }
-        for prediction in predictions
-    ]
-    group_match_predictions = pd.DataFrame(match_rows)
-    st.dataframe(group_match_predictions, use_container_width=True, hide_index=True)
-    render_csv_download(
-        group_match_predictions,
-        "group_match_predictions.csv",
-        "Download group match predictions CSV",
-        "download_group_match_predictions",
-    )
-
-    st.subheader("Monte Carlo")
-    st.write(
-        "Monte Carlo simulation repeatedly samples match outcomes based on model probabilities, "
-        "so it captures uncertainty better than a single deterministic projection."
-    )
-    simulation_count = st.selectbox(
-        "Number of simulations",
-        SIMULATION_OPTIONS,
-        index=1,
-        format_func=lambda value: f"{value:,}",
-    )
-    monte_carlo_results = run_monte_carlo_group_simulation(predictions, simulation_count)
-    st.dataframe(format_monte_carlo_results(monte_carlo_results), use_container_width=True, hide_index=True)
-    render_csv_download(
-        monte_carlo_results,
-        "selected_group_monte_carlo.csv",
-        "Download selected group Monte Carlo CSV",
-        "download_selected_group_monte_carlo",
-    )
-
-    st.subheader("All Groups")
-    st.write(
-        "All Groups Simulation runs the group stage thousands of times using model probabilities. "
-        "This captures uncertainty better than a single projected table."
-    )
-    if fixture_summary["Status"].eq("Incomplete").any():
-        st.warning("Some group-stage fixture data is incomplete. All-groups simulation may be unreliable.")
-
-    all_group_missing_teams = sorted(
-        {
-            team
-            for _, fixture in group_fixtures.iterrows()
-            for team in [str(fixture["team_a"]), str(fixture["team_b"])]
-            if model_team_name(team) not in teams
-        }
-    )
-    if all_group_missing_teams:
-        st.warning(
-            "Some group-stage fixture teams are not available in the model snapshot: "
-            f"{', '.join(all_group_missing_teams)}."
+    with st.container(border=True):
+        render_section_header(
+            f"Projected Group {selected_group}",
+            "Deterministic table based on each fixture's highest-probability result.",
+            "Single projection",
         )
-        return
+        if len(group_table) >= 2:
+            st.success(f"Likely direct qualifiers: {group_table.iloc[0]['Team']} and {group_table.iloc[1]['Team']}.")
+        if len(group_table) >= 3:
+            st.info(f"Possible qualifier, depending on third-place rules: {group_table.iloc[2]['Team']}.")
 
-    all_col1, all_col2 = st.columns(2)
-    with all_col1:
-        all_group_simulation_count = st.selectbox(
-            "Number of all-groups simulations",
+        selected_group_projection = group_table[
+            [
+                "Team",
+                "Played",
+                "Wins",
+                "Draws",
+                "Losses",
+                "Goals For",
+                "Goals Against",
+                "Goal Difference",
+                "Points",
+            ]
+        ].copy()
+        render_dark_table(selected_group_projection, hide_index=True)
+        render_csv_download(
+            selected_group_projection,
+            "selected_group_projection.csv",
+            "Download selected group projection CSV",
+            "download_selected_group_projection",
+        )
+
+    with st.container(border=True):
+        render_section_header("Match-by-match Predictions", "Fixture-level probabilities and projected scorelines.", "Fixtures")
+        match_rows = [
+            {
+                "Date": prediction["date"],
+                "Team A": prediction["team_a"],
+                "Team B": prediction["team_b"],
+                "Venue": prediction["venue"],
+                "Team A win %": f"{prediction['team_a_win_prob'] * 100:.1f}%",
+                "Draw %": f"{prediction['draw_prob'] * 100:.1f}%",
+                "Team B win %": f"{prediction['team_b_win_prob'] * 100:.1f}%",
+                "Predicted score": prediction["predicted_score"],
+                "Projected result": prediction["projected_result"],
+            }
+            for prediction in predictions
+        ]
+        group_match_predictions = pd.DataFrame(match_rows)
+        render_dark_table(group_match_predictions, hide_index=True)
+        render_csv_download(
+            group_match_predictions,
+            "group_match_predictions.csv",
+            "Download group match predictions CSV",
+            "download_group_match_predictions",
+        )
+
+    with st.container(border=True):
+        render_section_header("Monte Carlo Simulation", "Repeatedly sample outcomes from model probabilities.", "Uncertainty")
+        render_info_note(
+            "Monte Carlo simulation captures uncertainty better than a single deterministic projection."
+        )
+        simulation_count = st.selectbox(
+            "Number of simulations",
             SIMULATION_OPTIONS,
             index=1,
             format_func=lambda value: f"{value:,}",
         )
-    with all_col2:
-        all_group_outcome_model = st.selectbox("All groups outcome model", available_outcome_models())
+        monte_carlo_results = run_monte_carlo_group_simulation(predictions, simulation_count)
+        render_dark_table(format_monte_carlo_results(monte_carlo_results), hide_index=True)
+        render_csv_download(
+            monte_carlo_results,
+            "selected_group_monte_carlo.csv",
+            "Download selected group Monte Carlo CSV",
+            "download_selected_group_monte_carlo",
+        )
 
-    all_group_filter_options = ["All teams"] + [f"Group {group}" for group in groups]
-    all_group_filter = st.selectbox("Group filter", all_group_filter_options)
+    with st.container(border=True):
+        render_section_header(
+            "All Groups Simulation",
+            "Run the entire group stage thousands of times and estimate Round of 32 qualification.",
+            "Full field",
+        )
+        render_info_note(
+            "All Groups Simulation captures uncertainty better than a single projected table."
+        )
+        if fixture_summary["Status"].eq("Incomplete").any():
+            st.warning("Some group-stage fixture data is incomplete. All-groups simulation may be unreliable.")
 
-    predictions_by_group = predict_fixtures_by_group(group_fixtures, latest, all_group_outcome_model)
-    all_groups_results = run_all_groups_simulation(predictions_by_group, all_group_simulation_count)
-    if all_group_filter != "All teams":
-        selected_filter_group = all_group_filter.replace("Group ", "", 1)
-        all_groups_results = all_groups_results[all_groups_results["Group"].astype(str) == selected_filter_group]
+        all_group_missing_teams = sorted(
+            {
+                team
+                for _, fixture in group_fixtures.iterrows()
+                for team in [str(fixture["team_a"]), str(fixture["team_b"])]
+                if model_team_name(team) not in teams
+            }
+        )
+        if all_group_missing_teams:
+            st.warning(
+                "Some group-stage fixture teams are not available in the model snapshot: "
+                f"{', '.join(all_group_missing_teams)}."
+            )
+            return
 
-    st.dataframe(format_all_groups_results(all_groups_results), use_container_width=True, hide_index=True)
-    render_csv_download(
-        all_groups_results,
-        "all_groups_simulation.csv",
-        "Download all groups simulation CSV",
-        "download_all_groups_simulation",
-    )
+        all_col1, all_col2 = st.columns(2)
+        with all_col1:
+            all_group_simulation_count = st.selectbox(
+                "Number of all-groups simulations",
+                SIMULATION_OPTIONS,
+                index=1,
+                format_func=lambda value: f"{value:,}",
+            )
+        with all_col2:
+            all_group_outcome_model = st.selectbox("All groups outcome model", available_outcome_models())
+
+        all_group_filter_options = ["All teams"] + [f"Group {group}" for group in groups]
+        all_group_filter = st.selectbox("Group filter", all_group_filter_options)
+
+        predictions_by_group = predict_fixtures_by_group(group_fixtures, latest, all_group_outcome_model)
+        all_groups_results = run_all_groups_simulation(predictions_by_group, all_group_simulation_count)
+        if all_group_filter != "All teams":
+            selected_filter_group = all_group_filter.replace("Group ", "", 1)
+            all_groups_results = all_groups_results[all_groups_results["Group"].astype(str) == selected_filter_group]
+
+        render_dark_table(format_all_groups_results(all_groups_results), hide_index=True)
+        render_csv_download(
+            all_groups_results,
+            "all_groups_simulation.csv",
+            "Download all groups simulation CSV",
+            "download_all_groups_simulation",
+        )
 
 
 def render_knockout_simulation(latest: pd.DataFrame, teams: list[str]) -> None:
-    st.subheader("Knockout Simulation")
-    st.caption("FIFA-style Round of 32 slots with simplified third-place assignment.")
+    render_section_header(
+        "Knockout Simulation",
+        "FIFA-style Round of 32 slots with simplified third-place assignment.",
+        "Bracket path",
+    )
 
     fixtures, fixture_warning = load_world_cup_fixtures()
     if fixture_warning:
@@ -1697,70 +2265,78 @@ def render_knockout_simulation(latest: pd.DataFrame, teams: list[str]) -> None:
         st.warning(f"Some group-stage fixture teams are not available in the model snapshot: {', '.join(missing_teams)}.")
         return
 
-    col1, col2 = st.columns(2)
-    with col1:
-        outcome_model = st.selectbox("Knockout outcome model", available_outcome_models())
-    with col2:
-        simulation_count = st.selectbox(
-            "Number of knockout simulations",
-            SIMULATION_OPTIONS,
-            index=1,
-            format_func=lambda value: f"{value:,}",
-        )
+    with st.container(border=True):
+        render_section_header("Knockout Controls", "Choose the model and simulation count.", "Setup")
+        col1, col2 = st.columns(2)
+        with col1:
+            outcome_model = st.selectbox("Knockout outcome model", available_outcome_models())
+        with col2:
+            simulation_count = st.selectbox(
+                "Number of knockout simulations",
+                SIMULATION_OPTIONS,
+                index=1,
+                format_func=lambda value: f"{value:,}",
+            )
 
     predictions_by_group = predict_fixtures_by_group(group_fixtures, latest, outcome_model)
     knockout_results, third_place_fallback_count = run_knockout_simulation(
         predictions_by_group, latest, outcome_model, simulation_count
     )
 
-    if knockout_results["Round of 32 %"].max() == 0:
-        st.warning("The current fixture data did not produce a 32-team knockout field.")
-    if third_place_fallback_count:
-        st.warning(
-            "Some simulations used fallback third-place assignment because no eligible team was available "
-            "for one or more Round of 32 slots."
-        )
+    with st.container(border=True):
+        render_section_header("Tournament Probabilities", "How often each team reaches each stage.", "Monte Carlo")
+        if knockout_results["Round of 32 %"].max() == 0:
+            st.warning("The current fixture data did not produce a 32-team knockout field.")
+        if third_place_fallback_count:
+            st.warning(
+                "Some simulations used fallback third-place assignment because no eligible team was available "
+                "for one or more Round of 32 slots."
+            )
 
-    st.dataframe(format_knockout_results(knockout_results), use_container_width=True, hide_index=True)
-    render_csv_download(
-        knockout_results,
-        "knockout_probabilities.csv",
-        "Download knockout probabilities CSV",
-        "download_knockout_probabilities",
-    )
-
-    st.subheader("Sample Bracket Path")
-    st.write(
-        "This is one deterministic projected bracket using the current model. "
-        "The probability table is more reliable than this single path because football outcomes are uncertain."
-    )
-    bracket_rounds, sample_used_fallback = build_sample_bracket_path(predictions_by_group, latest, outcome_model)
-    if sample_used_fallback:
-        st.warning("This sample bracket used fallback third-place assignment for at least one Round of 32 slot.")
-
-    for round_name, round_table in bracket_rounds.items():
-        st.markdown(f"**{round_name}**")
-        st.dataframe(format_bracket_round(round_table), use_container_width=True, hide_index=True)
-
-    sample_bracket_tables = [
-        round_table.assign(Round=round_name)[
-            ["Round", "Match number", "Team A", "Team B", "Team A win %", "Team B win %", "Projected winner"]
-        ]
-        for round_name, round_table in bracket_rounds.items()
-        if not round_table.empty
-    ]
-    if sample_bracket_tables:
-        sample_bracket_export = pd.concat(sample_bracket_tables, ignore_index=True)
+        render_dark_table(format_knockout_results(knockout_results), hide_index=True)
         render_csv_download(
-            sample_bracket_export,
-            "sample_bracket_path.csv",
-            "Download sample bracket path CSV",
-            "download_sample_bracket_path",
+            knockout_results,
+            "knockout_probabilities.csv",
+            "Download knockout probabilities CSV",
+            "download_knockout_probabilities",
         )
+
+    with st.container(border=True):
+        render_section_header("Sample Bracket Path", "One deterministic projected bracket using the current model.", "Bracket")
+        render_info_note(
+            "The probability table is more reliable than this single path because football outcomes are uncertain."
+        )
+        bracket_rounds, sample_used_fallback = build_sample_bracket_path(predictions_by_group, latest, outcome_model)
+        if sample_used_fallback:
+            st.warning("This sample bracket used fallback third-place assignment for at least one Round of 32 slot.")
+
+        for round_name, round_table in bracket_rounds.items():
+            render_section_header(round_name, "Projected winners use adjusted knockout win probabilities.", "Round")
+            render_dark_table(format_bracket_round(round_table), hide_index=True)
+
+        sample_bracket_tables = [
+            round_table.assign(Round=round_name)[
+                ["Round", "Match number", "Team A", "Team B", "Team A win %", "Team B win %", "Projected winner"]
+            ]
+            for round_name, round_table in bracket_rounds.items()
+            if not round_table.empty
+        ]
+        if sample_bracket_tables:
+            sample_bracket_export = pd.concat(sample_bracket_tables, ignore_index=True)
+            render_csv_download(
+                sample_bracket_export,
+                "sample_bracket_path.csv",
+                "Download sample bracket path CSV",
+                "download_sample_bracket_path",
+            )
 
 
 def render_model_evaluation() -> None:
-    st.subheader("Model Evaluation")
+    render_section_header(
+        "Model Evaluation",
+        "Saved metrics, baseline-vs-xG comparisons, and model feature importance.",
+        "Diagnostics",
+    )
 
     outcome_metrics_path = ARTIFACTS_DIR / "outcome_metrics.json"
     score_metrics_path = ARTIFACTS_DIR / "score_metrics.json"
@@ -1798,220 +2374,266 @@ def render_model_evaluation() -> None:
             return "Not available"
         return f"{int(value):,}"
 
-    outcome_rows = [
-        metric_row("Training cutoff date", "training_cutoff_date", lambda value: str(value or TRAINING_CUTOFF_DATE)),
-        metric_row("Outcome model name", "model", lambda value: str(value or "Not available")),
-        {"Metric": "Test date range", **{label: test_range(metrics) for label, metrics in outcome_model_metrics.items()}},
-        metric_row("Number of train rows", "train_rows", format_count),
-        metric_row("Number of validation rows", "validation_rows", format_count),
-        metric_row("Number of test rows", "test_rows", format_count),
-        metric_row("Accuracy", "accuracy", format_percent),
-        metric_row("Log loss", "log_loss", lambda value: format_number(value, digits=3)),
-        metric_row("Brier score", "brier_score", lambda value: format_number(value, digits=3)),
+    accuracy_candidates = [
+        (label, metrics.get("accuracy")) for label, metrics in outcome_model_metrics.items()
+        if metrics.get("accuracy") is not None
     ]
-    st.table(pd.DataFrame(outcome_rows).set_index("Metric"))
-
-    score_rows = [
-        {
-            "Metric": "Score model RMSE for Team A/Home goals",
-            "Value": format_number(score_metrics.get("home_goals_rmse"), digits=3),
-        },
-        {
-            "Metric": "Score model RMSE for Team B/Away goals",
-            "Value": format_number(score_metrics.get("away_goals_rmse"), digits=3),
-        },
+    log_loss_candidates = [
+        (label, metrics.get("log_loss")) for label, metrics in outcome_model_metrics.items()
+        if metrics.get("log_loss") is not None
     ]
-    st.table(pd.DataFrame(score_rows).set_index("Metric"))
+    best_accuracy = max(accuracy_candidates, key=lambda item: item[1]) if accuracy_candidates else None
+    best_log_loss = min(log_loss_candidates, key=lambda item: item[1]) if log_loss_candidates else None
 
-    st.markdown(
-        "\n".join(
+    with st.container(border=True):
+        render_section_header("Performance Snapshot", "Current saved evaluation metrics.", "Metrics")
+        metric_cards = st.columns(4)
+        with metric_cards[0]:
+            render_kpi_card("Training cutoff", TRAINING_CUTOFF_DATE, "No leakage window")
+        with metric_cards[1]:
+            render_kpi_card("Outcome models", str(len(outcome_model_metrics)), "Metrics loaded")
+        with metric_cards[2]:
+            if best_accuracy:
+                render_kpi_card("Best accuracy", format_percent(best_accuracy[1]), best_accuracy[0])
+        with metric_cards[3]:
+            if best_log_loss:
+                render_kpi_card("Best log loss", format_number(best_log_loss[1], digits=3), best_log_loss[0])
+
+        outcome_rows = [
+            metric_row("Training cutoff date", "training_cutoff_date", lambda value: str(value or TRAINING_CUTOFF_DATE)),
+            metric_row("Outcome model name", "model", lambda value: str(value or "Not available")),
+            {"Metric": "Test date range", **{label: test_range(metrics) for label, metrics in outcome_model_metrics.items()}},
+            metric_row("Number of train rows", "train_rows", format_count),
+            metric_row("Number of validation rows", "validation_rows", format_count),
+            metric_row("Number of test rows", "test_rows", format_count),
+            metric_row("Accuracy", "accuracy", format_percent),
+            metric_row("Log loss", "log_loss", lambda value: format_number(value, digits=3)),
+            metric_row("Brier score", "brier_score", lambda value: format_number(value, digits=3)),
+        ]
+        render_dark_table(pd.DataFrame(outcome_rows).set_index("Metric"))
+
+        score_rows = [
+            {
+                "Metric": "Score model RMSE for Team A/Home goals",
+                "Value": format_number(score_metrics.get("home_goals_rmse"), digits=3),
+            },
+            {
+                "Metric": "Score model RMSE for Team B/Away goals",
+                "Value": format_number(score_metrics.get("away_goals_rmse"), digits=3),
+            },
+        ]
+        render_dark_table(pd.DataFrame(score_rows).set_index("Metric"))
+
+        render_bullet_panel(
             [
-                "- Accuracy = how often the model picked the correct result class.",
-                "- Log loss = how good the probability estimates are; lower is better.",
-                "- Brier score = how close the predicted probabilities are to the actual result; lower is better.",
-                "- RMSE = average goal prediction error; lower is better.",
+                "Accuracy = how often the model picked the correct result class.",
+                "Log loss = how good the probability estimates are; lower is better.",
+                "Brier score = how close the predicted probabilities are to the actual result; lower is better.",
+                "RMSE = average goal prediction error; lower is better.",
             ]
         )
-    )
 
-    st.subheader("Baseline vs xG Model Comparison")
-    comparison_rows = []
-    for label, filename in BASELINE_XG_COMPARISON_FILES.items():
-        path = ARTIFACTS_DIR / filename
-        if not path.exists():
-            continue
-        metrics = read_metrics(path)
-        comparison_rows.append(
-            {
-                "Model": label,
-                "xG used?": "Yes" if metrics.get("xg_features_used") else "No",
-                "Accuracy": format_percent(metrics.get("accuracy")),
-                "Log loss": format_number(metrics.get("log_loss"), digits=3),
-                "Train rows": f"{int(metrics.get('train_rows', 0)):,}",
-                "Test rows": f"{int(metrics.get('test_rows', 0)):,}",
-            }
-        )
+    with st.container(border=True):
+        render_section_header("Baseline vs xG Model Comparison", "Compare baseline models against xG-enhanced versions.", "Model stack")
+        comparison_rows = []
+        for label, filename in BASELINE_XG_COMPARISON_FILES.items():
+            path = ARTIFACTS_DIR / filename
+            if not path.exists():
+                continue
+            metrics = read_metrics(path)
+            comparison_rows.append(
+                {
+                    "Model": label,
+                    "xG used?": "Yes" if metrics.get("xg_features_used") else "No",
+                    "Accuracy": format_percent(metrics.get("accuracy")),
+                    "Log loss": format_number(metrics.get("log_loss"), digits=3),
+                    "Train rows": f"{int(metrics.get('train_rows', 0)):,}",
+                    "Test rows": f"{int(metrics.get('test_rows', 0)):,}",
+                }
+            )
 
-    if comparison_rows:
-        st.table(pd.DataFrame(comparison_rows).set_index("Model"))
-        st.caption(
-            "Higher accuracy is better. Lower log loss is better. "
-            "If xG improves log loss, it means probability quality improved."
-        )
-    else:
-        st.info("Baseline vs xG comparison metrics are not available yet. Run the full pipeline to create them.")
-
-    st.subheader("Feature Importance")
-    st.caption("Feature importance shows which inputs the model relies on most. It does not prove causation.")
-
-    importance_tables: dict[str, pd.DataFrame] = {}
-    skipped_importance_models: list[str] = []
-    for label in available_outcome_models():
-        try:
-            artifact = load_outcome_artifact(label)
-            table = feature_importance_table(label, artifact)
-        except Exception:
-            table = None
-
-        if table is not None and not table.empty:
-            importance_tables[label] = table
+        if comparison_rows:
+            render_dark_table(pd.DataFrame(comparison_rows).set_index("Model"))
+            render_info_note(
+                "Higher accuracy is better. Lower log loss is better. If xG improves log loss, probability quality improved."
+            )
         else:
-            skipped_importance_models.append(label)
+            st.info("Baseline vs xG comparison metrics are not available yet. Run the full pipeline to create them.")
 
-    if not importance_tables:
-        st.warning("Feature importance is unavailable for the saved outcome model artifacts.")
-    else:
-        selected_importance_model = st.selectbox("Feature importance model", list(importance_tables))
-        importance_table = importance_tables[selected_importance_model].copy()
-        display_importance_table = importance_table.copy()
-        display_importance_table["Importance"] = display_importance_table["Importance"].map(lambda value: f"{value:.4f}")
-        st.table(display_importance_table.set_index("Feature"))
-        render_csv_download(
-            importance_table,
-            "feature_importance.csv",
-            "Download feature importance CSV",
-            "download_feature_importance",
+    with st.container(border=True):
+        render_section_header(
+            "Feature Importance",
+            "Which inputs the model relies on most. This does not prove causation.",
+            "Interpretability",
         )
 
-        if importance_table["Feature"].str.contains("xg", case=False, regex=False).any():
-            st.info("xG features appear in the top features, so xG is contributing to this model's predictions.")
+        importance_tables: dict[str, pd.DataFrame] = {}
+        skipped_importance_models: list[str] = []
+        for label in available_outcome_models():
+            try:
+                artifact = load_outcome_artifact(label)
+                table = feature_importance_table(label, artifact)
+            except Exception:
+                table = None
 
-    if skipped_importance_models:
-        st.caption(
-            "Feature importance could not be safely extracted for: "
-            + ", ".join(skipped_importance_models)
-        )
+            if table is not None and not table.empty:
+                importance_tables[label] = table
+            else:
+                skipped_importance_models.append(label)
+
+        if not importance_tables:
+            st.warning("Feature importance is unavailable for the saved outcome model artifacts.")
+        else:
+            selected_importance_model = st.selectbox("Feature importance model", list(importance_tables))
+            importance_table = importance_tables[selected_importance_model].copy()
+            display_importance_table = importance_table.copy()
+            display_importance_table["Importance"] = display_importance_table["Importance"].map(lambda value: f"{value:.4f}")
+            render_dark_table(display_importance_table.set_index("Feature"))
+            render_csv_download(
+                importance_table,
+                "feature_importance.csv",
+                "Download feature importance CSV",
+                "download_feature_importance",
+            )
+
+            if importance_table["Feature"].str.contains("xg", case=False, regex=False).any():
+                st.info("xG features appear in the top features, so xG is contributing to this model's predictions.")
+
+        if skipped_importance_models:
+            st.caption(
+                "Feature importance could not be safely extracted for: "
+                + ", ".join(skipped_importance_models)
+            )
 
 
 def render_methodology() -> None:
-    st.subheader("Methodology")
-
-    st.markdown(
-        "\n".join(
-            [
-                "**Data Sources**",
-                "- Historical international match results.",
-                "- Fixture CSV stored locally at `data/processed/world_cup_2026_fixtures.csv`.",
-                "- `venue_city` and `kickoff_time` may contain placeholders if they have not been manually updated.",
-                "",
-                "**Training Cutoff**",
-                f"- Training cutoff date: `{TRAINING_CUTOFF_DATE}`.",
-                "- Models train only on matches before this date to avoid leakage from future or target-period matches.",
-                "",
-                "**Outcome Models**",
-                "- Logistic Regression is the interpretable baseline outcome model.",
-                "- XGBoost is the stronger nonlinear comparison model.",
-                "- Calibrated models are probability-adjusted versions intended to make predicted probabilities more reliable.",
-                "",
-                "**Score Prediction**",
-                "- The score model predicts likely goals and scorelines separately from the outcome model.",
-                "",
-                "**Expected Goals (xG)**",
-                "- xG estimates chance quality, which can add useful signal beyond final scores.",
-                "- xG is not always available for international matches.",
-                "- The app only uses xG when a local `data/processed/xg_team_match_features.csv` file exists with usable rows.",
-                "- Actual match xG is never used to predict that same match; only earlier xG rows are eligible.",
-                "",
-                "**Group Simulation**",
-                "- Deterministic projection uses the most likely result for each fixture.",
-                "- Monte Carlo simulation samples match outcomes based on model probabilities across many runs.",
-                "",
-                "**Knockout Simulation**",
-                "- Knockout matches redistribute draw probability between both teams because knockout matches need a winner.",
-                "- The bracket uses FIFA-style Round of 32 slots, with simplified third-place assignment until exact official mapping is implemented.",
-                "",
-                "**Limitations**",
-                "- No player injuries.",
-                "- No lineups.",
-                "- No live form updates unless the data is refreshed.",
-                "- xG is optional and depends on a local xG feature file being available.",
-                "- Placeholder venue cities or kickoff times may exist.",
-                "- Model predictions are probabilistic, not certain.",
-                "",
-                "**Future Improvements**",
-                "- Add exact official kickoff times and stadiums.",
-                "- Add live fixture API.",
-                "- Add richer xG sources and coverage.",
-                "- Add player availability and injury features.",
-                "- Add exact third-place bracket mapping.",
-                "- Add SHAP or feature contribution explanations.",
-            ]
-        )
+    render_section_header(
+        "Methodology",
+        "A concise view of the data, assumptions, model stack, and fixture manager.",
+        "Transparency",
     )
 
-    st.subheader("Fixture Data Manager")
-    fixtures, fixture_warning = load_world_cup_fixtures()
-    if fixture_warning:
-        st.warning(fixture_warning)
-        fixtures = None
+    card_rows = [
+        [
+            (
+                "Data",
+                [
+                    "Historical international results",
+                    "Local World Cup fixture CSV",
+                    "Optional xG and team-news CSVs",
+                ],
+            ),
+            (
+                "Training",
+                [
+                    f"Cutoff: {TRAINING_CUTOFF_DATE}",
+                    "Only pre-cutoff matches are used",
+                    "Rolling features avoid same-match leakage",
+                ],
+            ),
+            (
+                "Models",
+                [
+                    "Logistic Regression baseline",
+                    "XGBoost comparison model",
+                    "Calibrated probability variants",
+                ],
+            ),
+        ],
+        [
+            (
+                "Simulation",
+                [
+                    "Score model predicts likely goals",
+                    "Monte Carlo samples match outcomes",
+                    "Knockout uses simplified FIFA-style slots",
+                ],
+            ),
+            (
+                "Limitations",
+                [
+                    "No live API updates",
+                    "Team news is context only",
+                    "Predictions are probabilities, not certainties",
+                ],
+            ),
+            (
+                "Next",
+                [
+                    "Add official stadium and kickoff data",
+                    "Improve xG and player availability coverage",
+                    "Add exact third-place bracket mapping",
+                ],
+            ),
+        ],
+    ]
 
-    if fixtures is not None and not fixtures.empty:
-        quality_summary, fixtures_per_group, quality_warnings = fixture_quality_checks(fixtures)
-        st.write(f"Current fixture file: `{FIXTURES_PATH.relative_to(ROOT)}`")
-        st.table(quality_summary.set_index("Check"))
+    with st.container(border=True):
+        render_section_header("Project Assumptions", "What the app uses and what it deliberately leaves out.", "Overview")
+        for row in card_rows:
+            columns = st.columns(3)
+            for column, (title, items) in zip(columns, row):
+                with column:
+                    render_method_card(title, items)
 
-        st.write("Fixtures per group")
-        st.dataframe(fixtures_per_group, use_container_width=True, hide_index=True)
+    with st.container(border=True):
+        render_section_header(
+            "Fixture Data Manager",
+            "Inspect, validate, and replace the local World Cup fixture CSV.",
+            "Data tools",
+        )
+        fixtures, fixture_warning = load_world_cup_fixtures()
+        if fixture_warning:
+            st.warning(fixture_warning)
+            fixtures = None
 
-        for warning in quality_warnings:
+        if fixtures is not None and not fixtures.empty:
+            quality_summary, fixtures_per_group, quality_warnings = fixture_quality_checks(fixtures)
+            render_info_note(f"Current fixture file: {FIXTURES_PATH.relative_to(ROOT)}")
+            render_dark_table(quality_summary.set_index("Check"))
+
+            render_section_header("Fixtures Per Group", "Fixture counts from the current CSV.", "Validation")
+            render_dark_table(fixtures_per_group, hide_index=True)
+
+            for warning in quality_warnings:
+                st.warning(warning)
+
+            with st.expander("Current fixture table"):
+                render_dark_table(fixtures, hide_index=True)
+
+        uploaded_file = st.file_uploader("Upload replacement fixture CSV", type=["csv"])
+        if uploaded_file is None:
+            return
+
+        uploaded_fixtures, upload_error = validate_uploaded_fixtures(uploaded_file)
+        if upload_error:
+            st.error(upload_error)
+            return
+
+        st.success("Uploaded CSV passed required column and basic date validation.")
+        uploaded_summary, uploaded_per_group, uploaded_warnings = fixture_quality_checks(uploaded_fixtures)
+        render_section_header("Uploaded Fixture Checks", "Validation results before replacement.", "Upload")
+        render_dark_table(uploaded_summary.set_index("Check"))
+        render_dark_table(uploaded_per_group, hide_index=True)
+        for warning in uploaded_warnings:
             st.warning(warning)
 
-        with st.expander("Current fixture table"):
-            st.dataframe(fixtures, use_container_width=True, hide_index=True)
-
-    uploaded_file = st.file_uploader("Upload replacement fixture CSV", type=["csv"])
-    if uploaded_file is None:
-        return
-
-    uploaded_fixtures, upload_error = validate_uploaded_fixtures(uploaded_file)
-    if upload_error:
-        st.error(upload_error)
-        return
-
-    st.success("Uploaded CSV passed required column and basic date validation.")
-    uploaded_summary, uploaded_per_group, uploaded_warnings = fixture_quality_checks(uploaded_fixtures)
-    st.write("Uploaded fixture quality checks")
-    st.table(uploaded_summary.set_index("Check"))
-    st.dataframe(uploaded_per_group, use_container_width=True, hide_index=True)
-    for warning in uploaded_warnings:
-        st.warning(warning)
-
-    if st.button("Replace fixture CSV", key="replace_fixture_csv"):
-        backup_path = PROCESSED_DIR / "world_cup_2026_fixtures_backup_before_upload.csv"
-        if FIXTURES_PATH.exists():
-            shutil.copy2(FIXTURES_PATH, backup_path)
-        uploaded_fixtures.to_csv(FIXTURES_PATH, index=False)
-        st.success(
-            f"Saved replacement fixture CSV and created backup at `{backup_path.relative_to(ROOT)}`."
-        )
-        st.write("Updated fixture table")
-        st.dataframe(uploaded_fixtures, use_container_width=True, hide_index=True)
+        if st.button("Replace fixture CSV", key="replace_fixture_csv"):
+            backup_path = PROCESSED_DIR / "world_cup_2026_fixtures_backup_before_upload.csv"
+            if FIXTURES_PATH.exists():
+                shutil.copy2(FIXTURES_PATH, backup_path)
+            uploaded_fixtures.to_csv(FIXTURES_PATH, index=False)
+            st.success(
+                f"Saved replacement fixture CSV and created backup at `{backup_path.relative_to(ROOT)}`."
+            )
+            render_section_header("Updated Fixture Table", "Replacement data saved locally.", "Saved")
+            render_dark_table(uploaded_fixtures, hide_index=True)
 
 
 st.set_page_config(page_title="World Cup Predictor", page_icon=":soccer:", layout="wide")
 
-st.title("World Cup Predictor")
-st.caption(f"Model trained only on matches before {TRAINING_CUTOFF_DATE}.")
+inject_dashboard_css()
+render_hero()
 
 required_files = [
     PROCESSED_DIR / "latest_team_features.csv",
