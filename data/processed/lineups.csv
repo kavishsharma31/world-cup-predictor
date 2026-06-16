@@ -1,0 +1,7 @@
+﻿match_id,team,player,position,is_starter
+55,Argentina,Argentina Player 1,FW,TRUE
+55,Argentina,Argentina Player 2,CM,TRUE
+55,Argentina,Argentina Player 4,GK,TRUE
+55,Algeria,Algeria Player 1,FW,TRUE
+55,Algeria,Algeria Player 2,CM,FALSE
+55,Algeria,Algeria Player 4,GK,TRUE

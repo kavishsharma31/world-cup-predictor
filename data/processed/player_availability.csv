@@ -1,0 +1,7 @@
+﻿match_id,team,player,status,reason,importance
+55,Argentina,Argentina Player 1,Available,,High
+55,Argentina,Argentina Player 2,Doubtful,Minor injury,Medium
+55,Argentina,Argentina Player 3,Unavailable,Suspension,High
+55,Algeria,Algeria Player 1,Available,,High
+55,Algeria,Algeria Player 2,Doubtful,Fitness concern,Medium
+55,Algeria,Algeria Player 3,Unavailable,Injury,High

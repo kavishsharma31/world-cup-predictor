@@ -1,0 +1,12 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.streamlit/
+.env
+
+artifacts/*.joblib
+data/raw/
+
+.DS_Store
+.ipynb_checkpoints/
