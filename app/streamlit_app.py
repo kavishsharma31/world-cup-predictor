@@ -67,6 +67,57 @@ PLAYER_AVAILABILITY_PATH = PROCESSED_DIR / "player_availability.csv"
 LINEUPS_PATH = PROCESSED_DIR / "lineups.csv"
 PLAYER_AVAILABILITY_COLUMNS = ["match_id", "team", "player", "status", "reason", "importance"]
 LINEUP_COLUMNS = ["match_id", "team", "player", "position", "is_starter"]
+PUBLIC_ERROR_MESSAGE = "Something went wrong while loading this section. Please try again later."
+
+
+def log_server_error(context: str, error: BaseException) -> None:
+    print(f"[world-cup-predictor] {context}: {type(error).__name__}: {error}", file=sys.stderr)
+
+
+def render_public_error() -> None:
+    st.error(PUBLIC_ERROR_MESSAGE)
+
+
+def safe_render_section(context: str, renderer, *args, **kwargs) -> None:
+    try:
+        renderer(*args, **kwargs)
+    except Exception as exc:
+        log_server_error(context, exc)
+        render_public_error()
+
+
+def safe_load_world_cup_fixtures(context: str) -> tuple[pd.DataFrame | None, str | None]:
+    try:
+        fixtures, warning = load_world_cup_fixtures()
+    except Exception as exc:
+        log_server_error(context, exc)
+        return None, PUBLIC_ERROR_MESSAGE
+
+    if warning:
+        log_server_error(context, RuntimeError(warning))
+        return None, PUBLIC_ERROR_MESSAGE
+
+    return fixtures, None
+
+
+def load_startup_snapshot() -> pd.DataFrame:
+    required_files = [
+        PROCESSED_DIR / "latest_team_features.csv",
+        ARTIFACTS_DIR / "outcome_model.joblib",
+        ARTIFACTS_DIR / "score_model.joblib",
+    ]
+    missing = [str(path) for path in required_files if not path.exists()]
+    if missing:
+        log_server_error("startup model loading", FileNotFoundError(", ".join(missing)))
+        render_public_error()
+        st.stop()
+
+    try:
+        return pd.read_csv(PROCESSED_DIR / "latest_team_features.csv", parse_dates=["last_match_date"])
+    except Exception as exc:
+        log_server_error("latest team snapshot loading", exc)
+        render_public_error()
+        st.stop()
 
 
 def inject_dashboard_css() -> None:
@@ -74,41 +125,42 @@ def inject_dashboard_css() -> None:
         """
         <style>
         :root {
-            --bg: #050b14;
-            --panel: rgba(10, 18, 32, 0.88);
-            --panel-strong: rgba(13, 27, 48, 0.96);
-            --panel-soft: rgba(15, 23, 42, 0.74);
-            --border: rgba(148, 163, 184, 0.22);
-            --border-strong: rgba(56, 189, 248, 0.52);
-            --text: #e5eefb;
-            --muted: #94a3b8;
-            --green: #34d399;
-            --blue: #38bdf8;
-            --yellow: #facc15;
+            --page-bg: #070a12;
+            --surface-1: #0f1622;
+            --surface-2: #151f2e;
+            --surface-3: #1b293b;
+            --surface-note: #111a27;
+            --border: #2b394c;
+            --border-strong: #46566d;
+            --text: #f3f6fa;
+            --muted: #a8b3c3;
+            --subtle: #7d8999;
+            --accent: #49b47e;
+            --accent-strong: #72d19c;
+            --rule: #223044;
             --radius: 8px;
         }
         .stApp {
-            background:
-                linear-gradient(90deg, rgba(148, 163, 184, 0.035) 1px, transparent 1px),
-                linear-gradient(180deg, rgba(148, 163, 184, 0.028) 1px, transparent 1px),
-                linear-gradient(135deg, #050b14 0%, #071827 46%, #030712 100%);
-            background-size: 44px 44px, 44px 44px, auto;
+            background: var(--page-bg);
             color: var(--text);
         }
         #MainMenu, footer, [data-testid="stDecoration"], [data-testid="stToolbar"], [data-testid="stStatusWidget"] {
             visibility: hidden;
         }
         [data-testid="stHeader"] {
-            background: rgba(5, 11, 20, 0.86);
-            backdrop-filter: blur(10px);
+            background: var(--page-bg);
         }
         .block-container {
             max-width: 1440px;
-            padding-top: 1.1rem;
+            padding-top: 1.25rem;
             padding-bottom: 3rem;
         }
         h1, h2, h3, h4, h5, h6, p, li, label, span {
             color: var(--text);
+        }
+        p, li, label {
+            font-size: 0.95rem;
+            line-height: 1.55;
         }
         h2, h3 {
             letter-spacing: 0;
@@ -116,98 +168,86 @@ def inject_dashboard_css() -> None:
         .hero {
             position: relative;
             overflow: hidden;
-            border: 1px solid rgba(56, 189, 248, 0.34);
-            background:
-                linear-gradient(90deg, rgba(52, 211, 153, 0.08) 0 1px, transparent 1px 100%),
-                linear-gradient(180deg, rgba(56, 189, 248, 0.08) 0 1px, transparent 1px 100%),
-                linear-gradient(135deg, rgba(8, 47, 73, 0.96), rgba(6, 78, 59, 0.48) 52%, rgba(15, 23, 42, 0.98));
-            background-size: 42px 42px, 42px 42px, auto;
+            border: 1px solid var(--border-strong);
+            background: var(--surface-1);
             border-radius: var(--radius);
-            padding: 28px 30px 24px;
+            padding: 28px 30px;
             margin-bottom: 24px;
-            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
-        }
-        .hero::after {
-            content: "";
-            position: absolute;
-            inset: auto 24px 0 24px;
-            height: 3px;
-            background: linear-gradient(90deg, var(--green), var(--blue));
-            opacity: 0.9;
         }
         .hero-topline {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 14px;
-            margin-bottom: 18px;
+            border-bottom: 1px solid var(--rule);
+            margin-bottom: 22px;
+            padding-bottom: 14px;
         }
         .hero-kicker {
-            color: #bbf7d0;
-            font-size: 0.78rem;
+            color: var(--accent-strong);
+            font-size: 0.75rem;
             font-weight: 800;
             text-transform: uppercase;
+            letter-spacing: 0.06em;
         }
         .hero-live {
-            border: 1px solid rgba(56, 189, 248, 0.42);
-            color: #e0f2fe;
-            background: rgba(8, 47, 73, 0.56);
-            border-radius: 999px;
-            padding: 7px 12px;
-            font-size: 0.78rem;
-            font-weight: 800;
+            color: var(--muted);
+            font-size: 0.82rem;
+            font-weight: 700;
             white-space: nowrap;
         }
         .hero h1 {
-            margin: 0 0 8px;
+            margin: 0 0 12px;
             font-size: 3rem;
             line-height: 1.05;
             letter-spacing: 0;
+            font-weight: 850;
         }
         .hero p {
             margin: 0;
             max-width: 920px;
-            color: #d7e6f7;
+            color: var(--muted);
             font-size: 1.05rem;
+            line-height: 1.6;
         }
         .hero-stats {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 10px;
-            margin-top: 22px;
+            gap: 14px;
+            margin-top: 24px;
         }
         .hero-stat {
-            background: rgba(2, 6, 23, 0.42);
-            border: 1px solid rgba(226, 232, 240, 0.16);
+            background: var(--surface-2);
+            border: 1px solid var(--border-strong);
             border-radius: var(--radius);
-            padding: 12px 14px;
+            padding: 20px;
         }
         .hero-stat span {
             display: block;
-            color: var(--muted);
+            color: var(--subtle);
             font-size: 0.72rem;
             font-weight: 800;
             text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
         .hero-stat strong {
             display: block;
-            margin-top: 3px;
+            margin-top: 8px;
             color: var(--text);
-            font-size: 1rem;
+            font-size: 1.08rem;
+            font-weight: 800;
         }
         .section-card, div[data-testid="stVerticalBlockBorderWrapper"] {
-            background: linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(7, 17, 31, 0.88));
+            background: var(--surface-1);
             border: 1px solid var(--border);
             border-radius: var(--radius);
-            padding: 1.05rem;
-            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+            padding: 1.15rem;
         }
         div[data-testid="stMetric"], .kpi-card, .prob-card, .score-card, .method-card {
-            background: var(--panel-strong);
-            border: 1px solid var(--border);
+            background: var(--surface-2);
+            border: 1px solid var(--border-strong);
             border-radius: var(--radius);
-            padding: 16px;
-            box-shadow: 0 12px 38px rgba(0, 0, 0, 0.20);
+            padding: 18px;
         }
         div[data-testid="stMetric"] label, div[data-testid="stMetricLabel"] p {
             color: var(--muted) !important;
@@ -220,37 +260,22 @@ def inject_dashboard_css() -> None:
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            border-color: rgba(56, 189, 248, 0.32);
-            background:
-                linear-gradient(180deg, rgba(13, 27, 48, 0.98), rgba(3, 7, 18, 0.94));
+            border-left: 4px solid var(--border-strong);
+            background: var(--surface-2);
             position: relative;
             overflow: hidden;
         }
-        .prob-card::before {
-            content: "";
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 4px;
-            background: var(--blue);
-            opacity: 0.72;
-        }
         .prob-card.top {
-            border-color: rgba(52, 211, 153, 0.85);
-            background:
-                linear-gradient(145deg, rgba(20, 83, 45, 0.76), rgba(8, 47, 73, 0.38) 58%, rgba(15, 23, 42, 0.98));
-            box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.25), 0 20px 60px rgba(52, 211, 153, 0.16);
-        }
-        .prob-card.top::before {
-            background: var(--green);
-            opacity: 1;
+            border-color: var(--accent);
+            border-left-color: var(--accent);
+            background: #162433;
         }
         .prob-card .label, .score-card .label, .kpi-card .label {
-            color: var(--muted);
-            font-size: 0.86rem;
-            font-weight: 700;
+            color: var(--subtle);
+            font-size: 0.75rem;
+            font-weight: 800;
             text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
         .prob-card .value {
             color: var(--text);
@@ -259,21 +284,21 @@ def inject_dashboard_css() -> None:
             line-height: 1;
         }
         .prob-card .tag {
-            color: #bbf7d0;
+            color: var(--accent-strong);
             font-size: 0.82rem;
             font-weight: 700;
         }
         .prob-card .bar {
             height: 7px;
             border-radius: 999px;
-            background: rgba(148, 163, 184, 0.18);
+            background: #253246;
             overflow: hidden;
         }
         .prob-card .bar span {
             display: block;
             height: 100%;
             border-radius: 999px;
-            background: linear-gradient(90deg, var(--green), var(--blue));
+            background: var(--accent);
         }
         .score-card .value, .kpi-card .value {
             color: var(--text);
@@ -292,20 +317,21 @@ def inject_dashboard_css() -> None:
             align-items: flex-start;
             justify-content: space-between;
             gap: 16px;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+            border-bottom: 1px solid var(--rule);
             margin-bottom: 16px;
             padding-bottom: 12px;
         }
         .section-eyebrow {
-            color: var(--green);
+            color: var(--accent-strong);
             font-size: 0.72rem;
             font-weight: 800;
             text-transform: uppercase;
+            letter-spacing: 0.06em;
         }
         .section-title {
             color: var(--text);
             font-size: 1.35rem;
-            font-weight: 850;
+            font-weight: 800;
             margin-top: 2px;
         }
         .section-subtitle {
@@ -315,18 +341,18 @@ def inject_dashboard_css() -> None:
             max-width: 820px;
         }
         .info-note {
-            border: 1px solid rgba(56, 189, 248, 0.28);
-            background: rgba(8, 47, 73, 0.32);
-            border-radius: var(--radius);
-            color: #d7e6f7;
-            padding: 10px 12px;
+            border-left: 4px solid var(--accent);
+            background: var(--surface-note);
+            border-radius: 4px;
+            color: var(--muted);
+            padding: 11px 14px;
             margin: 10px 0 14px;
             font-size: 0.92rem;
         }
         .bullet-panel {
-            border: 1px solid rgba(52, 211, 153, 0.26);
-            background: rgba(20, 83, 45, 0.18);
-            border-radius: var(--radius);
+            border-left: 4px solid var(--accent);
+            background: var(--surface-note);
+            border-radius: 4px;
             padding: 13px 16px;
             margin-top: 12px;
         }
@@ -335,7 +361,7 @@ def inject_dashboard_css() -> None:
             padding-left: 1.05rem;
         }
         .bullet-panel li {
-            color: #dbeafe;
+            color: var(--muted);
             margin: 6px 0;
         }
         .dark-table-wrap {
@@ -343,7 +369,7 @@ def inject_dashboard_css() -> None:
             border-radius: var(--radius);
             overflow-x: auto;
             overflow-y: hidden;
-            background: rgba(2, 6, 23, 0.34);
+            background: var(--surface-1);
             margin: 8px 0 16px;
         }
         .dark-table-wrap table {
@@ -353,28 +379,28 @@ def inject_dashboard_css() -> None:
             font-size: 0.88rem;
         }
         .dark-table-wrap thead th {
-            background: rgba(8, 47, 73, 0.72);
-            color: #bfdbfe;
+            background: var(--surface-3);
+            color: var(--text);
             font-weight: 800;
             text-transform: uppercase;
             font-size: 0.72rem;
             padding: 10px 12px;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+            border-bottom: 1px solid var(--border);
             text-align: left;
             white-space: nowrap;
         }
         .dark-table-wrap tbody th,
         .dark-table-wrap tbody td {
             padding: 9px 12px;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.13);
-            color: #dbeafe;
+            border-bottom: 1px solid #202c3e;
+            color: var(--muted);
             white-space: nowrap;
         }
         .dark-table-wrap tbody tr:nth-child(even) {
-            background: rgba(15, 23, 42, 0.40);
+            background: #0c1320;
         }
         .dark-table-wrap tbody tr:hover {
-            background: rgba(14, 116, 144, 0.20);
+            background: #162234;
         }
         .method-card {
             min-height: 170px;
@@ -382,53 +408,63 @@ def inject_dashboard_css() -> None:
         }
         .method-card h4 {
             margin: 0 0 8px;
-            color: #e0f2fe;
+            color: var(--text);
+            font-size: 1.08rem;
+            font-weight: 800;
         }
         .method-card ul {
             margin: 0;
             padding-left: 1rem;
         }
         .method-card li {
-            color: #cbd5e1;
+            color: var(--muted);
             margin-bottom: 4px;
         }
         [data-testid="stDataFrame"], [data-testid="stTable"] {
             border: 1px solid var(--border);
             border-radius: var(--radius);
             overflow: hidden;
-            background: rgba(2, 6, 23, 0.34);
+            background: var(--surface-1);
         }
         [data-baseweb="tab-list"] {
             gap: 10px;
             margin-bottom: 16px;
         }
         [data-baseweb="tab"] {
-            background: rgba(15, 23, 42, 0.70);
+            background: var(--surface-1);
             border: 1px solid var(--border);
             border-radius: 999px;
             padding: 8px 18px;
         }
+        [data-baseweb="tab"] p {
+            color: var(--muted);
+            font-weight: 700;
+        }
         [data-baseweb="tab"][aria-selected="true"] {
-            border-color: rgba(56, 189, 248, 0.75);
-            background: rgba(14, 116, 144, 0.35);
+            border-color: var(--accent);
+            background: #1d3b2f;
+        }
+        [data-baseweb="tab"][aria-selected="true"] p {
+            color: var(--text);
+            font-weight: 800;
         }
         [data-baseweb="tab-highlight"] {
-            background: linear-gradient(90deg, var(--green), var(--blue));
+            background: transparent;
         }
         .stButton > button, .stDownloadButton > button {
             border-radius: 999px;
-            border: 1px solid rgba(56, 189, 248, 0.42);
-            background: rgba(8, 145, 178, 0.18);
-            color: #e0f2fe;
+            border: 1px solid var(--border-strong);
+            background: var(--surface-3);
+            color: var(--text);
         }
         .stButton > button:hover, .stDownloadButton > button:hover {
-            border-color: var(--green);
-            color: #bbf7d0;
+            border-color: var(--accent);
+            color: var(--accent-strong);
         }
         div[data-baseweb="select"] > div,
         div[data-baseweb="input"] > div {
-            background: rgba(15, 23, 42, 0.88);
-            border-color: rgba(148, 163, 184, 0.32);
+            background: var(--surface-3);
+            border-color: var(--border-strong);
         }
         div[data-baseweb="select"] span,
         div[data-baseweb="select"] div,
@@ -850,6 +886,10 @@ def local_logistic_contribution_table(
 def render_csv_download(df: pd.DataFrame, file_name: str, label: str, key: str) -> None:
     if df is None or df.empty:
         return
+    file_path = Path(file_name)
+    if file_path.name != file_name or file_path.suffix.lower() != ".csv":
+        log_server_error("blocked unsafe download", ValueError(file_name))
+        return
     st.download_button(
         label=label,
         data=df.to_csv(index=False).encode("utf-8"),
@@ -904,7 +944,8 @@ def validate_uploaded_fixtures(uploaded_file) -> tuple[pd.DataFrame | None, str 
     try:
         uploaded = pd.read_csv(uploaded_file, dtype={"match_id": str, "group": str})
     except Exception as exc:
-        return None, f"Could not read uploaded CSV: {exc}"
+        log_server_error("uploaded fixture CSV loading", exc)
+        return None, "Uploaded CSV could not be read."
 
     missing_columns = [column for column in FIXTURE_COLUMNS if column not in uploaded.columns]
     if missing_columns:
@@ -930,13 +971,18 @@ def load_optional_context_csv(path: Path, required_columns: list[str]) -> tuple[
     except pd.errors.EmptyDataError:
         return pd.DataFrame(columns=required_columns), None
     except Exception as exc:
-        return pd.DataFrame(columns=required_columns), f"Could not read `{path.name}`: {exc}"
+        log_server_error(f"optional context loading: {path.name}", exc)
+        return pd.DataFrame(columns=required_columns), PUBLIC_ERROR_MESSAGE
 
     missing_columns = [column for column in required_columns if column not in data.columns]
     if missing_columns:
+        log_server_error(
+            f"optional context validation: {path.name}",
+            ValueError(f"missing columns: {', '.join(missing_columns)}"),
+        )
         return (
             pd.DataFrame(columns=required_columns),
-            f"`{path.name}` is missing required columns: {', '.join(missing_columns)}.",
+            PUBLIC_ERROR_MESSAGE,
         )
 
     return data[required_columns].copy(), None
@@ -1078,7 +1124,7 @@ def render_predictor(latest: pd.DataFrame, teams: list[str]) -> None:
     latest_by_team = latest.set_index("team")
     selected_match_id: str | None = None
 
-    fixtures, fixture_warning = load_world_cup_fixtures()
+    fixtures, fixture_warning = safe_load_world_cup_fixtures("predictor fixture loading")
     has_fixtures = fixtures is not None and not fixtures.empty
     mode_options = ["Select official fixture", "Custom match"]
     default_mode_index = 0 if has_fixtures else 1
@@ -1096,7 +1142,7 @@ def render_predictor(latest: pd.DataFrame, teams: list[str]) -> None:
             outcome_model = st.selectbox("Outcome model", available_outcome_models())
 
         if fixture_warning:
-            st.warning(f"{fixture_warning} Use Custom match mode to enter teams manually.")
+            st.warning(fixture_warning)
 
         if prediction_mode == "Select official fixture" and not has_fixtures:
             st.warning("Official fixture mode is unavailable until the fixture CSV is added.")
@@ -1168,10 +1214,15 @@ def render_predictor(latest: pd.DataFrame, teams: list[str]) -> None:
     if selected_match_id is not None:
         render_team_news(selected_match_id, team_a, team_b)
 
-    X = make_fixture_features(model_home_team, model_away_team, latest, neutral=neutral, tournament=tournament)
-    outcome_artifact = load_outcome_artifact(outcome_model)
-    outcome_probs = predict_outcome_from_artifact(X, outcome_model, outcome_artifact)
-    home_xg, away_xg, scorelines, score_outcome = predict_score(X, max_goals=6)
+    try:
+        X = make_fixture_features(model_home_team, model_away_team, latest, neutral=neutral, tournament=tournament)
+        outcome_artifact = load_outcome_artifact(outcome_model)
+        outcome_probs = predict_outcome_from_artifact(X, outcome_model, outcome_artifact)
+        home_xg, away_xg, scorelines, score_outcome = predict_score(X, max_goals=6)
+    except Exception as exc:
+        log_server_error("predictor prediction generation", exc)
+        render_public_error()
+        return
 
     labels = {
         "team_a_win": f"{team_a} win",
@@ -2020,9 +2071,9 @@ def render_group_simulation(latest: pd.DataFrame, teams: list[str]) -> None:
         "Tournament view",
     )
 
-    fixtures, fixture_warning = load_world_cup_fixtures()
+    fixtures, fixture_warning = safe_load_world_cup_fixtures("group simulation fixture loading")
     if fixture_warning:
-        st.warning(f"{fixture_warning} Add the fixture CSV to simulate a group.")
+        st.warning(fixture_warning)
         return
     if fixtures is None or fixtures.empty:
         st.warning("No fixtures were found in the fixture CSV.")
@@ -2093,8 +2144,13 @@ def render_group_simulation(latest: pd.DataFrame, teams: list[str]) -> None:
         st.warning(f"Some fixture teams are not available in the model snapshot: {', '.join(missing_teams)}.")
         return
 
-    predictions = [predict_group_fixture(row, latest, outcome_model) for _, row in selected_fixtures.iterrows()]
-    group_table = build_projected_group_table(predictions)
+    try:
+        predictions = [predict_group_fixture(row, latest, outcome_model) for _, row in selected_fixtures.iterrows()]
+        group_table = build_projected_group_table(predictions)
+    except Exception as exc:
+        log_server_error("selected group prediction generation", exc)
+        render_public_error()
+        return
 
     with st.container(border=True):
         render_section_header(
@@ -2164,7 +2220,12 @@ def render_group_simulation(latest: pd.DataFrame, teams: list[str]) -> None:
             index=1,
             format_func=lambda value: f"{value:,}",
         )
-        monte_carlo_results = run_monte_carlo_group_simulation(predictions, simulation_count)
+        try:
+            monte_carlo_results = run_monte_carlo_group_simulation(predictions, simulation_count)
+        except Exception as exc:
+            log_server_error("selected group Monte Carlo simulation", exc)
+            render_public_error()
+            return
         render_dark_table(format_monte_carlo_results(monte_carlo_results), hide_index=True)
         render_csv_download(
             monte_carlo_results,
@@ -2214,8 +2275,13 @@ def render_group_simulation(latest: pd.DataFrame, teams: list[str]) -> None:
         all_group_filter_options = ["All teams"] + [f"Group {group}" for group in groups]
         all_group_filter = st.selectbox("Group filter", all_group_filter_options)
 
-        predictions_by_group = predict_fixtures_by_group(group_fixtures, latest, all_group_outcome_model)
-        all_groups_results = run_all_groups_simulation(predictions_by_group, all_group_simulation_count)
+        try:
+            predictions_by_group = predict_fixtures_by_group(group_fixtures, latest, all_group_outcome_model)
+            all_groups_results = run_all_groups_simulation(predictions_by_group, all_group_simulation_count)
+        except Exception as exc:
+            log_server_error("all groups prediction generation", exc)
+            render_public_error()
+            return
         if all_group_filter != "All teams":
             selected_filter_group = all_group_filter.replace("Group ", "", 1)
             all_groups_results = all_groups_results[all_groups_results["Group"].astype(str) == selected_filter_group]
@@ -2236,9 +2302,9 @@ def render_knockout_simulation(latest: pd.DataFrame, teams: list[str]) -> None:
         "Bracket path",
     )
 
-    fixtures, fixture_warning = load_world_cup_fixtures()
+    fixtures, fixture_warning = safe_load_world_cup_fixtures("knockout fixture loading")
     if fixture_warning:
-        st.warning(f"{fixture_warning} Add the fixture CSV to simulate the knockout stage.")
+        st.warning(fixture_warning)
         return
     if fixtures is None or fixtures.empty:
         st.warning("No fixtures were found in the fixture CSV.")
@@ -2278,10 +2344,15 @@ def render_knockout_simulation(latest: pd.DataFrame, teams: list[str]) -> None:
                 format_func=lambda value: f"{value:,}",
             )
 
-    predictions_by_group = predict_fixtures_by_group(group_fixtures, latest, outcome_model)
-    knockout_results, third_place_fallback_count = run_knockout_simulation(
-        predictions_by_group, latest, outcome_model, simulation_count
-    )
+    try:
+        predictions_by_group = predict_fixtures_by_group(group_fixtures, latest, outcome_model)
+        knockout_results, third_place_fallback_count = run_knockout_simulation(
+            predictions_by_group, latest, outcome_model, simulation_count
+        )
+    except Exception as exc:
+        log_server_error("knockout prediction generation", exc)
+        render_public_error()
+        return
 
     with st.container(border=True):
         render_section_header("Tournament Probabilities", "How often each team reaches each stage.", "Monte Carlo")
@@ -2306,7 +2377,12 @@ def render_knockout_simulation(latest: pd.DataFrame, teams: list[str]) -> None:
         render_info_note(
             "The probability table is more reliable than this single path because football outcomes are uncertain."
         )
-        bracket_rounds, sample_used_fallback = build_sample_bracket_path(predictions_by_group, latest, outcome_model)
+        try:
+            bracket_rounds, sample_used_fallback = build_sample_bracket_path(predictions_by_group, latest, outcome_model)
+        except Exception as exc:
+            log_server_error("sample bracket prediction generation", exc)
+            render_public_error()
+            return
         if sample_used_fallback:
             st.warning("This sample bracket used fallback third-place assignment for at least one Round of 32 slot.")
 
@@ -2342,11 +2418,8 @@ def render_model_evaluation() -> None:
     score_metrics_path = ARTIFACTS_DIR / "score_metrics.json"
     missing_metrics = [path.name for path in [outcome_metrics_path, score_metrics_path] if not path.exists()]
     if missing_metrics:
-        st.error("Missing metrics artifacts. Run the pipeline first:")
-        st.code("python scripts/run_full_pipeline.py", language="bash")
-        st.write("Missing files:")
-        for item in missing_metrics:
-            st.write(f"- {item}")
+        log_server_error("model evaluation metrics loading", FileNotFoundError(", ".join(missing_metrics)))
+        render_public_error()
         return
 
     score_metrics = read_metrics(score_metrics_path)
@@ -2582,14 +2655,14 @@ def render_methodology() -> None:
             "Inspect, validate, and replace the local World Cup fixture CSV.",
             "Data tools",
         )
-        fixtures, fixture_warning = load_world_cup_fixtures()
+        fixtures, fixture_warning = safe_load_world_cup_fixtures("methodology fixture loading")
         if fixture_warning:
             st.warning(fixture_warning)
             fixtures = None
 
         if fixtures is not None and not fixtures.empty:
             quality_summary, fixtures_per_group, quality_warnings = fixture_quality_checks(fixtures)
-            render_info_note(f"Current fixture file: {FIXTURES_PATH.relative_to(ROOT)}")
+            render_info_note("Current fixture file is loaded.")
             render_dark_table(quality_summary.set_index("Check"))
 
             render_section_header("Fixtures Per Group", "Fixture counts from the current CSV.", "Validation")
@@ -2624,7 +2697,7 @@ def render_methodology() -> None:
                 shutil.copy2(FIXTURES_PATH, backup_path)
             uploaded_fixtures.to_csv(FIXTURES_PATH, index=False)
             st.success(
-                f"Saved replacement fixture CSV and created backup at `{backup_path.relative_to(ROOT)}`."
+                "Saved replacement fixture CSV and created a backup."
             )
             render_section_header("Updated Fixture Table", "Replacement data saved locally.", "Saved")
             render_dark_table(uploaded_fixtures, hide_index=True)
@@ -2635,34 +2708,24 @@ st.set_page_config(page_title="World Cup Predictor", page_icon=":soccer:", layou
 inject_dashboard_css()
 render_hero()
 
-required_files = [
-    PROCESSED_DIR / "latest_team_features.csv",
-    ARTIFACTS_DIR / "outcome_model.joblib",
-    ARTIFACTS_DIR / "score_model.joblib",
-]
-missing = [str(path.relative_to(ROOT)) for path in required_files if not path.exists()]
-
-if missing:
-    st.error("Missing model artifacts. Run the pipeline first:")
-    st.code("python scripts/run_full_pipeline.py", language="bash")
-    st.write("Missing files:")
-    for item in missing:
-        st.write(f"- {item}")
+latest = load_startup_snapshot()
+try:
+    teams = sorted(latest["team"].dropna().unique().tolist())
+except Exception as exc:
+    log_server_error("team snapshot validation", exc)
+    render_public_error()
     st.stop()
-
-latest = pd.read_csv(PROCESSED_DIR / "latest_team_features.csv", parse_dates=["last_match_date"])
-teams = sorted(latest["team"].dropna().unique().tolist())
 
 predictor_tab, group_simulation_tab, evaluation_tab, methodology_tab = st.tabs(
     ["Predictor", "Group Simulation", "Model Evaluation", "Methodology"]
 )
 with predictor_tab:
-    render_predictor(latest, teams)
+    safe_render_section("Predictor tab", render_predictor, latest, teams)
 with group_simulation_tab:
-    render_group_simulation(latest, teams)
+    safe_render_section("Group Simulation tab", render_group_simulation, latest, teams)
     with st.expander("Knockout Simulation", expanded=False):
-        render_knockout_simulation(latest, teams)
+        safe_render_section("Knockout Simulation section", render_knockout_simulation, latest, teams)
 with evaluation_tab:
-    render_model_evaluation()
+    safe_render_section("Model Evaluation tab", render_model_evaluation)
 with methodology_tab:
-    render_methodology()
+    safe_render_section("Methodology tab", render_methodology)
